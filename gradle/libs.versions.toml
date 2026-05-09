@@ -1,0 +1,39 @@
+
+# IMPORTANT (context for lwjgl version)
+# LWJGL versions 3.4.X and later do not document the source code.
+# So you can't hover over methods, classes etc. and see their function desc. in an IDE.
+# That's why we're sticking with the latest version that still has readable docs (3.3.6)
+# For production you can upgrade to 3.4.1 for performance (jave project panama is "online")
+
+[versions]
+# required java version
+jdk = "25" # Do not downgrade.
+# Toolchain & Plugins
+shadow = "9.4.1"
+
+# Libraries
+lwjgl-prod = "3.4.1" # production (use this or later versions for release) requires JDK 25
+lwjgl-dev = "3.3.6"  # development (gives deprecated warings. That's fine)
+joml = "1.10.8"
+joml-primitives = "1.10.0"
+tinylog = "2.7.0"
+gson = "2.13.2"
+
+[libraries]
+# shadow jar (for the game-conventions)
+gradle-plugin-shadow = { module = "com.gradleup.shadow:com.gradleup.shadow.gradle.plugin", version.ref = "shadow" }
+# LWJGL Core & BOM
+lwjgl-bom = { group = "org.lwjgl", name = "lwjgl-bom", version.ref = "lwjgl-dev" }
+lwjgl = { group = "org.lwjgl", name = "lwjgl" }
+lwjgl-glfw = { group = "org.lwjgl", name = "lwjgl-glfw" }
+lwjgl-opengl = { group = "org.lwjgl", name = "lwjgl-opengl" }
+lwjgl-stb = { group = "org.lwjgl", name = "lwjgl-stb" }
+# Utilities
+joml = { group = "org.joml", name = "joml", version.ref = "joml" }
+joml-primitives = { group = "org.joml", name = "joml-primitives", version.ref = "joml-primitives" }
+tinylog-api = { group = "org.tinylog", name = "tinylog-api", version.ref = "tinylog" }
+tinylog-impl = { group = "org.tinylog", name = "tinylog-impl", version.ref = "tinylog" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

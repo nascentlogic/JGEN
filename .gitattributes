@@ -1,0 +1,8 @@
+# Handle line endings automatically for most files
+* text=auto
+# Explicitly declare that the Gradle wrapper script MUST use LF
+# This prevents it from breaking on Linux/macOS
+gradlew text eol=lf
+# Denote that Windows-specific batch files should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
