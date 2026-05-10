@@ -1,5 +1,4 @@
 plugins {
-    // id("common-conventions")
     id("game-conventions")
 }
 
@@ -10,6 +9,6 @@ gameSettings {
     versionPatch.set(0)
     entryClass.set("org.example.Main")
     internalLogEnabled.set(false)
-    // assetDirectories.set(listOf("assets"))
-    // programArguments.add("--show-fps")
+    assetDirectories.set(listOf("assets"))
+    programArguments.add("--show-fps")
 }
