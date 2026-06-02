@@ -3,7 +3,7 @@ package io.github.nascentlogic.jgen.utils;
 /**
  * F.Dahl, 5/8/2026
  */
-public class MathUtils {
+public class JgenMath {
 
 
     /**

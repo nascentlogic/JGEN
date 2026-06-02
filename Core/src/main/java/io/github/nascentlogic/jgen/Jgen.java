@@ -1,6 +1,6 @@
 package io.github.nascentlogic.jgen;
 
-import io.github.nascentlogic.jgen.io.Disk;
+import io.github.nascentlogic.jgen.io.JgenDisk;
 import org.tinylog.Logger;
 
 import java.io.IOException;
@@ -8,7 +8,7 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
 import java.util.Objects;
 
-import static io.github.nascentlogic.jgen.utils.Utils.formatBytes;
+import static io.github.nascentlogic.jgen.utils.JgenUtils.formatBytes;
 
 /**
  * F.Dahl, 5/10/2026
@@ -24,23 +24,26 @@ public class Jgen {
         } return insntance;
     }
 
-    private Game game;
-    public Game game() { return game; }
-    public <T extends Game> T game(Class<T> clazz) {
+    private JgenGame game;
+    public JgenGame game() { return game; }
+    public <T extends JgenGame> T game(Class<T> clazz) {
         if (game.getClass() != clazz) {
             throw new ClassCastException("");
         } return clazz.cast(game);
     }
 
-    public void start(Game game, String[] args) {
+    public void start(JgenGame game, String[] args) {
         Objects.requireNonNull(game,"game cannot be null");
         args = args == null ? new String[0] : args;
         try {
-            Disk.initialize();
+            JgenDisk.initialize();
             logSystemInfo();
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+
+
     }
 
 
@@ -62,8 +65,8 @@ public class Jgen {
         sb.append("\n--- Paths ---");
         sb.append("\n\tRoot Path         : ").append(Paths.get("").toAbsolutePath());
         sb.append("\n\tWorking Dir       : ").append(System.getProperty("user.dir"));
-        sb.append("\n\tUser Data         : ").append(Disk.userDataDirectory());
-        sb.append("\n\tGame Root         : ").append(Disk.gameRootDirectory());
+        sb.append("\n\tUser Data         : ").append(JgenDisk.userDataDirectory());
+        sb.append("\n\tGame Root         : ").append(JgenDisk.gameRootDirectory());
         sb.append("\n--- JVM Arguments ---");
         for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
             sb.append("\n\t   ").append(arg);

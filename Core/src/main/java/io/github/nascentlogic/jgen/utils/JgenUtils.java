@@ -3,7 +3,7 @@ package io.github.nascentlogic.jgen.utils;
 /**
  * F.Dahl, 5/8/2026
  */
-public class Utils {
+public class JgenUtils {
 
 
     private static final String[] BYTE_UNITS = {"B", "KB", "MB", "GB", "TB"};

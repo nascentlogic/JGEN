@@ -12,12 +12,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.Consumer;
 
-import static io.github.nascentlogic.jgen.utils.MathUtils.nextPowerOfTwo;
+import static io.github.nascentlogic.jgen.utils.JgenMath.nextPowerOfTwo;
 
 /**
  * F.Dahl, 5/6/2026
  */
-public class InternalLogWriter implements Writer {
+public class JgenlLogWriter implements Writer {
 
     private static final OptimizedEvictingQueue<Entry> queue = new OptimizedEvictingQueue<>(256);
     /**
@@ -27,7 +27,7 @@ public class InternalLogWriter implements Writer {
      */
     public static void collect(Consumer<Entry> consumer) { queue.drainAll(consumer); }
 
-    public InternalLogWriter(Map<String, String> properties) { /* */ }
+    public JgenlLogWriter(Map<String, String> properties) { /* */ }
     @Override public Collection<LogEntryValue> getRequiredLogEntryValues() { return EnumSet.of(LogEntryValue.LEVEL, LogEntryValue.MESSAGE, LogEntryValue.EXCEPTION); }
     @Override public void write(LogEntry logEntry) { queue.add(Entry.from(logEntry)); }
     @Override public void flush() throws Exception { /* */ }

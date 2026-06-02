@@ -16,7 +16,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
-public final class Disk {
+public final class JgenDisk {
 
     /** Size limit (in bytes) for reading files (internal ByteBuffer allocation).
      * Assume reading larger files throw {@link IOException}. */
@@ -45,7 +45,7 @@ public final class Disk {
      */
     public static void initialize() throws IOException {
         if (INITIALIZED) return;;
-        synchronized (Disk.class) {
+        synchronized (JgenDisk.class) {
             if (INITIALIZED) return;
             Class<?> entryClass = identifyEntryClass();
             Path codeSourceLoc = codeSourceLocation(entryClass);
@@ -185,7 +185,7 @@ public final class Disk {
         Exception fLogConfEx = null;
         try { String logEnabledString = GameModuleProperties.get(GameModuleProperties.GAME_INTERNAL_LOG_ENABLED);
             if (Boolean.parseBoolean(logEnabledString)) {
-                config.put("writerInternal",InternalLogWriter.class.getName());
+                config.put("writerInternal", JgenlLogWriter.class.getName());
                 internalLogEnabled = true; }
         } catch (IOException e) { iLogConfEx = e; }
         if (!devMode()) {
@@ -194,8 +194,8 @@ public final class Disk {
                 String sep = FileSystems.getDefault().getSeparator();
                 config.put("writerFile", "rolling file");
                 config.put("writerFile.file", logFolder + sep + "log-{count}.txt");
-                config.put("writerFile.policies", "startup");
-                config.put("writerFile.backups", "7");
+                config.put("writerFile.policies", "startup, size: 1mb");
+                config.put("writerFile.backups", "3");
                 config.put("writerFile.buffered", "true");
                 config.put("writerFile.append", "false");
                 config.put("writerFile.writingthread", "true");
@@ -803,7 +803,7 @@ public final class Disk {
     private static ByteBuffer resourcesRead(String filePath, boolean directAlloc) throws IOException {
         Objects.requireNonNull(filePath,"String filePath is null");
         filePath = filePath.startsWith("/") ? filePath : "/" + filePath;
-        try (InputStream is = Disk.class.getResourceAsStream(filePath)) {
+        try (InputStream is = JgenDisk.class.getResourceAsStream(filePath)) {
             if (is == null) throw new FileNotFoundException("Resource could not be found: " + filePath);
             byte[] bytes = is.readAllBytes();
             ByteBuffer buffer = allocateBuffer(bytes.length, directAlloc);

@@ -1,6 +1,6 @@
 package org.example;
 
-import io.github.nascentlogic.jgen.Game;
+import io.github.nascentlogic.jgen.JgenGame;
 import io.github.nascentlogic.jgen.Jgen;
 
 /**
@@ -10,8 +10,7 @@ public class Main {
 
     static void main(String[] args) {
 
-        for (String s : args) System.out.println(s);
-        Jgen.get().start(new Game() { }, args);
+
 
     }
 }
