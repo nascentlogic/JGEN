@@ -7,7 +7,7 @@ gameSettings {
     versionMajor.set(0)
     versionMinor.set(1)
     versionPatch.set(0)
-    entryClass.set("org.example.Main")
+    entryClass.set("org.example.TestGame")
     internalLogEnabled.set(false)
     assetDirectories.set(listOf("assets"))
     programArguments.add("--show-fps")

@@ -16,7 +16,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
-public final class JgenDisk {
+public final class Disk {
 
     /** Size limit (in bytes) for reading files (internal ByteBuffer allocation).
      * Assume reading larger files throw {@link IOException}. */
@@ -45,7 +45,7 @@ public final class JgenDisk {
      */
     public static void initialize() throws IOException {
         if (INITIALIZED) return;;
-        synchronized (JgenDisk.class) {
+        synchronized (Disk.class) {
             if (INITIALIZED) return;
             Class<?> entryClass = identifyEntryClass();
             Path codeSourceLoc = codeSourceLocation(entryClass);
@@ -803,7 +803,7 @@ public final class JgenDisk {
     private static ByteBuffer resourcesRead(String filePath, boolean directAlloc) throws IOException {
         Objects.requireNonNull(filePath,"String filePath is null");
         filePath = filePath.startsWith("/") ? filePath : "/" + filePath;
-        try (InputStream is = JgenDisk.class.getResourceAsStream(filePath)) {
+        try (InputStream is = Disk.class.getResourceAsStream(filePath)) {
             if (is == null) throw new FileNotFoundException("Resource could not be found: " + filePath);
             byte[] bytes = is.readAllBytes();
             ByteBuffer buffer = allocateBuffer(bytes.length, directAlloc);
