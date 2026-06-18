@@ -1,6 +1,6 @@
 package io.github.nascentlogic.jgen.io;
 
-
+/** Target platforms */
 public enum Platform {
 
     WINDOWS, LINUX, MAC;

@@ -434,7 +434,7 @@ public class Window {
                         IntBuffer framebufferW = stack.mallocInt(1);
                         IntBuffer framebufferH = stack.mallocInt(1);
                         glfwGetFramebufferSize(windowHandle, framebufferW, framebufferH);
-                        Logger.info("New framebuffer resolution:    ({}x{})", framebufferW, framebufferH);
+                        Logger.info("New framebuffer resolution:    ({}x{})", framebufferW.get(0), framebufferH.get(0));
                     } // This fallback should technically never happen
                 } else Logger.error("CRITICAL: Operating System graphics driver failed to instantiate exclusive fullscreen context.");
             } else Logger.warn("Unable to use monitor: \"{}\" (Disconnected)", monitor.name);
@@ -487,7 +487,7 @@ public class Window {
                     IntBuffer framebufferW = stack.mallocInt(1);
                     IntBuffer framebufferH = stack.mallocInt(1);
                     glfwGetFramebufferSize(windowHandle,framebufferW,framebufferH);
-                    Logger.info("New framebuffer resolution:        ({}x{})", framebufferW, framebufferH); }
+                    Logger.info("New framebuffer resolution:        ({}x{})", framebufferW.get(0), framebufferH.get(0)); }
             } else Logger.warn("Unable to use monitor: \"{}\" (Disconnected)", monitor.name);
         } else Logger.warn("Cannot switch to fullscreen mode: Monitor argument is NULL");
     }

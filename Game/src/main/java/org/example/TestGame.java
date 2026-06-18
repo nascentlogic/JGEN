@@ -1,11 +1,12 @@
 package org.example;
 
-import io.github.nascentlogic.jgen.Game;
-import io.github.nascentlogic.jgen.Jgen;
-import io.github.nascentlogic.jgen.LaunchConfig;
-import io.github.nascentlogic.jgen.Window;
+import io.github.nascentlogic.jgen.*;
+import org.joml.Vector2i;
 import org.joml.Vector4i;
 
+import java.util.List;
+
+import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30.glBindFramebuffer;
@@ -41,6 +42,24 @@ public class TestGame implements Game {
 
     public void update(double dt) {
 
+        Window window = Jgen.get().window();
+        Keyboard keys = Jgen.get().keys();
+        if (keys.justPressed(GLFW_KEY_A)) {
+            Window.Monitor currentMonitor = window.currentMonitor();
+            if (currentMonitor == null) {
+                // in windowed
+                Window.Monitor primaryMonitor = window.primaryMonitor();
+                if (primaryMonitor != null) {
+                    window.fullscreenMode(primaryMonitor);
+                }
+
+            } else {
+                // in exclusive fullscreen
+                Vector2i gameResolution = window.gameResolution(new Vector2i());
+                window.windowedMode(currentMonitor,gameResolution.x,gameResolution.y);
+
+            }
+        }
         // System.out.println(Jgen.get().time().fpsEstimate());
     }
 

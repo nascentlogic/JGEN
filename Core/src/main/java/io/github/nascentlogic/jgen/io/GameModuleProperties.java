@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+/** Game meta info */
 public final class GameModuleProperties {
 
     private GameModuleProperties() { }

@@ -17,7 +17,7 @@ import static io.github.nascentlogic.jgen.utils.JgenMath.nextPowerOfTwo;
 /**
  * F.Dahl, 5/6/2026
  */
-public class JgenlLogWriter implements Writer {
+public final class JgenlLogWriter implements Writer {
 
     private static final OptimizedEvictingQueue<Entry> queue = new OptimizedEvictingQueue<>(256);
     /**

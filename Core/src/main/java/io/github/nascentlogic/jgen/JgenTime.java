@@ -3,7 +3,7 @@ package io.github.nascentlogic.jgen;
 /**
  * F.Dahl, 6/16/2026
  */
-public class JgenTime {
+public final class JgenTime {
 
     private long startTimeNS;
     private long deltaTimeNS;
