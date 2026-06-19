@@ -204,6 +204,11 @@ public class Window {
         });
 
 
+        glfwSetCursorEnterCallback(windowHandle, new GLFWCursorEnterCallback() {
+            public void invoke(long window, boolean entered) {
+                mouse.onCursorEnter(entered);
+            }
+        });
         glfwSetCursorPosCallback(windowHandle, new GLFWCursorPosCallback() {
             public void invoke(long window, double xpos, double ypos) {
                 mouse.onCursorHover(xpos,ypos);
@@ -372,13 +377,22 @@ public class Window {
     public Gamepads gamepads() {
         return gamepads;
     }
+    public Vector4i viewport(Vector4i dst) { return dst.set(viewport); }
     public Vector2i windowSize(Vector2i dst) {
         return dst.set(windowSize);
     }
     public Vector2i framebufferResolution(Vector2i dst) {
         return dst.set(framebufferRes);
     }
-    public Vector4i viewport(Vector4i dst) { return dst.set(viewport); }
+
+    protected Vector4i viewport() { return viewport; }
+    protected Vector2i windowSize() { return windowSize; }
+    protected Vector2i framebufferResolution() { return framebufferRes; }
+    protected Vector2i gameResolution() {
+        if (gameResolution.x == 0 && gameResolution.y == 0) {
+            return framebufferRes;
+        } return gameResolution;
+    }
 
     /**
      * Game Resolution (If set) is a fixed resolution (E.g. 1920x1080) that the Game uses for rendering (off-screen / internal framebuffer).
@@ -389,7 +403,7 @@ public class Window {
      * @return fixed game resolution OR the actual window framefuffer resolution (if game resolution is not set).
      */
     public Vector2i gameResolution(Vector2i dst) {
-        if (gameResolution == null || (gameResolution.x == 0 && gameResolution.y == 0))
+        if (gameResolution.x == 0 && gameResolution.y == 0)
             return framebufferResolution(dst);
         return dst.set(gameResolution);
     }

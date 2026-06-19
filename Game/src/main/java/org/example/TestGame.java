@@ -43,6 +43,7 @@ public class TestGame implements Game {
     public void update(double dt) {
 
         Window window = Jgen.get().window();
+        Mouse mouse = Jgen.get().mouse();
         Keyboard keys = Jgen.get().keys();
         if (keys.justPressed(GLFW_KEY_A)) {
             Window.Monitor currentMonitor = window.currentMonitor();
@@ -59,6 +60,10 @@ public class TestGame implements Game {
                 window.windowedMode(currentMonitor,gameResolution.x,gameResolution.y);
 
             }
+        }
+
+        if (mouse.isDragging(Mouse.LEFT)) {
+            System.out.println(mouse.dragVector(Mouse.LEFT));
         }
         // System.out.println(Jgen.get().time().fpsEstimate());
     }
