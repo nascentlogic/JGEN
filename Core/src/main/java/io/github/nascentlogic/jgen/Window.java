@@ -27,7 +27,7 @@ import static org.lwjgl.opengl.GL11.GL_TRUE;
 /**
  * F.Dahl, 6/10/2026
  */
-public class Window {
+public final class Window {
 
     public static final int GAME_RES_MIN = 128;
     public static final int GAME_RES_MAX = 5000;
@@ -385,10 +385,10 @@ public class Window {
         return dst.set(framebufferRes);
     }
 
-    protected Vector4i viewport() { return viewport; }
-    protected Vector2i windowSize() { return windowSize; }
-    protected Vector2i framebufferResolution() { return framebufferRes; }
-    protected Vector2i gameResolution() {
+    Vector4i viewport() { return viewport; }
+    Vector2i windowSize() { return windowSize; }
+    Vector2i framebufferResolution() { return framebufferRes; }
+    Vector2i gameResolution() {
         if (gameResolution.x == 0 && gameResolution.y == 0) {
             return framebufferRes;
         } return gameResolution;

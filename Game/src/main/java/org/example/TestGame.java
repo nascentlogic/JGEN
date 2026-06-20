@@ -1,10 +1,11 @@
 package org.example;
 
 import io.github.nascentlogic.jgen.*;
+import io.github.nascentlogic.jgen.gfx.Bitmap;
+import io.github.nascentlogic.jgen.io.Disk;
 import org.joml.Vector2i;
 import org.joml.Vector4i;
-
-import java.util.List;
+import org.joml.primitives.Rectanglef;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 import static org.lwjgl.opengl.GL11.*;
@@ -32,6 +33,11 @@ public class TestGame implements Game {
     public void start() throws Exception {
 
         Window window = Jgen.get().window();
+
+        //try (Bitmap image = Disk.gameLoadPng("assets","test.png");){
+        //    Disk.userSavePng(image,"folder","test.png");
+        //}
+
         // window.toggleVsync(true);
         // List<Window.Monitor> monitors = window.connectedMonitors();
         // for (Window.Monitor monitor : monitors) {
@@ -63,7 +69,8 @@ public class TestGame implements Game {
         }
 
         if (mouse.isDragging(Mouse.LEFT)) {
-            System.out.println(mouse.dragVector(Mouse.LEFT));
+            Rectanglef a = mouse.dragArea(Mouse.LEFT,new Rectanglef());
+            if(a.isValid()) System.out.printf("Area: min(%.2f,%.2f), max(%.2f,%.2f)%n",a.minX,a.minY,a.maxX,a.maxY);
         }
         // System.out.println(Jgen.get().time().fpsEstimate());
     }

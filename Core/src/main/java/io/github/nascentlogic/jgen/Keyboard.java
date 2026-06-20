@@ -9,7 +9,7 @@ import static org.lwjgl.glfw.GLFW.*;
 /**
  * F.Dahl, 6/7/2026
  */
-public class Keyboard {
+public final class Keyboard {
 
     public static final int MAX_PROCESSORS = 16;
     private final TextProcessor[] textProcessors = new TextProcessor[MAX_PROCESSORS];

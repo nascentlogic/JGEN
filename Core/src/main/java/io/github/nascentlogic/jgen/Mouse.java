@@ -2,6 +2,7 @@ package io.github.nascentlogic.jgen;
 
 import org.joml.*;
 import org.joml.Math;
+import org.joml.primitives.Rectanglef;
 import org.lwjgl.system.MemoryStack;
 
 import java.nio.DoubleBuffer;
@@ -125,6 +126,20 @@ public class Mouse {
         }
     }
 
+    public Rectanglef dragArea(int button, Rectanglef dst) {
+        if (isDragging(button)) {
+            Vector2f p0 = dragOrigin[button];
+            float p1x = p0.x + dragVector[button].x;
+            float p1y = p0.y + dragVector[button].y;
+            dst.minX = Math.min(p0.x,p1x);
+            dst.minY = Math.min(p0.y,p1y);
+            dst.maxX = Math.max(p0.x,p1x);
+            dst.maxY = Math.max(p0.y,p1y);
+        } else {
+            dst.minX = 0; dst.minY = 0;
+            dst.maxX = 0; dst.maxY = 0;
+        } return dst;
+    }
 
     public Vector2f position() {
         return positionCurrent;

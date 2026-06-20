@@ -98,11 +98,13 @@ public final class Jgen {
         } catch (Exception e) {
             Logger.error(e);
         } finally {
-            Logger.info("EXITING GAME");
-            try { game.exit();
+            try {
+                Logger.info("EXITING GAME");
+                game.exit();
             } catch (Exception e) {
                 Logger.error(e);
-            } finally { Logger.info("CLOSING WINDOW");
+            } finally {
+                Logger.info("CLOSING WINDOW");
                 window.terminate();
             }
         }

@@ -3,6 +3,7 @@ package io.github.nascentlogic.jgen.io;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import io.github.nascentlogic.jgen.gfx.Bitmap;
 import org.tinylog.Logger;
 import org.tinylog.configuration.Configuration;
 
@@ -221,8 +222,6 @@ public final class Disk {
     // **************************************************************************************
     //  READ OPERATIONS
     // **************************************************************************************
-
-
 
 
     /**
@@ -568,6 +567,34 @@ public final class Disk {
     }
 
 
+    // **************************************************************************************
+    //  IMAGES / SHADERS ++
+    // **************************************************************************************
+
+
+    public static Bitmap resourcePng(String first, String... more) throws Exception {
+        return new Bitmap(resourceDirect(first,more));
+    }
+    public static Bitmap gameLoadPng(String first, String... more) throws Exception {
+        return new Bitmap(gameLoadDirect(first,more));
+    }
+    public static Bitmap userLoadPng(String first, String... more) throws Exception {
+        return new Bitmap(userLoadDirect(first,more));
+    }
+    public static Bitmap loadPng(String first, String... more) throws Exception {
+        return new Bitmap(loadDirect(first,more));
+    }
+    public static void userSavePng(Bitmap bitmap, String first, String... more) throws IOException {
+        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        savePng(bitmap,path);
+    }
+    public static void savePng(Bitmap bitmap, String first, String... more) throws IOException {
+        savePng(bitmap,toPath(first,more));
+    }
+    public static void savePng(Bitmap bitmap, Path filePath) throws IOException {
+        Objects.requireNonNull(bitmap, "bitmap is null");
+        fileSystemWrite(bitmap.compress(),filePath,false);
+    }
 
 
     // **************************************************************************************
@@ -823,8 +850,9 @@ public final class Disk {
      */
     private static ByteBuffer fileSystemRead(Path filePath, boolean directAlloc) throws IOException {
         Objects.requireNonNull(filePath,"Path filePath is null");
+        Logger.info("Filesystem read: \"{}\"",filePath.toAbsolutePath());
         if (!Files.isRegularFile(filePath,LinkOption.NOFOLLOW_LINKS))
-            throw new FileNotFoundException("File not found or not a regular file: " + filePath);
+            throw new FileNotFoundException("File not found or not a regular file: " + filePath.toAbsolutePath());
         long initialSize = Files.size(filePath); // If the file is too large, it throws outside (never enters the loop).
         if (initialSize > Integer.MAX_VALUE) throw new IOException("File size (" + initialSize + " bytes) exceeds Integer.MAX_VALUE.");
         if (initialSize > MAX_FILE_SIZE) throw new IOException("File size (" + initialSize + " bytes) exceeds the maximum allowed limit: " + MAX_FILE_SIZE);
@@ -873,6 +901,7 @@ public final class Disk {
     private static void fileSystemWrite(ByteBuffer content, Path filePath, boolean append) throws IOException {
         Objects.requireNonNull(content, "ByteBuffer content is null");
         Objects.requireNonNull(filePath, "Path filePath is null");
+        Logger.info("Filesystem write: \"{}\"",filePath.toAbsolutePath());
         Path parent = filePath.getParent();
         if (parent != null) Files.createDirectories(parent);
         if (append) writeDirect(content, filePath, StandardOpenOption.APPEND);
