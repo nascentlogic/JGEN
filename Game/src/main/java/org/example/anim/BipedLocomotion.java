@@ -195,7 +195,7 @@ public class BipedLocomotion {
         }
 
         /**
-         * Calculates the virtual z-axis lift arc height based on current step progress.
+         * Calculates the virtual z-axis lift arc h based on current step progress.
          * Query this externally during your rendering pass to offset your sprite drawing.
          */
         public float getStepHeight(float maxStepHeight) {
@@ -244,7 +244,7 @@ public class BipedLocomotion {
                 return;
             }
 
-            // Evaluate tracking error thresholds incorporating the state stance width multiplier
+            // Evaluate tracking error thresholds incorporating the state stance w multiplier
             float lDistSq = lFoot.worldPos.distanceSquared(homeLeft);
             float rDistSq = rFoot.worldPos.distanceSquared(homeRight);
             float threshold = bodyRadius * stepThresholdFactor * state.widthMod;

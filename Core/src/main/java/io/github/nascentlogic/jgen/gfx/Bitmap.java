@@ -1,6 +1,7 @@
 package io.github.nascentlogic.jgen.gfx;
 
 import io.github.nascentlogic.jgen.Disposable;
+import io.github.nascentlogic.jgen.Jgen;
 import org.lwjgl.stb.STBIWriteCallback;
 import org.lwjgl.stb.STBImageWrite;
 import org.lwjgl.system.MemoryStack;
@@ -22,7 +23,7 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 /**
  * F.Dahl, 6/19/2026
  */
-public class Bitmap implements Disposable, AutoCloseable {
+public class Bitmap implements Disposable {
 
     private ByteBuffer pixels;
     private final int width;
@@ -40,9 +41,9 @@ public class Bitmap implements Disposable, AutoCloseable {
     }
 
     /**
-     * @param pixels pixel data != null && remaining == width * height * channels
-     * @param width width > 0
-     * @param height height > 0
+     * @param pixels pixel data != null && remaining == w * h * channels
+     * @param width w > 0
+     * @param height h > 0
      * @param channels channels > 0 && channels <= 4;
      */
     public Bitmap(ByteBuffer pixels, int width, int height, int channels) {
@@ -65,7 +66,7 @@ public class Bitmap implements Disposable, AutoCloseable {
         }
     }
 
-    public Bitmap(ByteBuffer png) throws Exception {
+    public Bitmap(ByteBuffer png) throws IOException {
         Objects.requireNonNull(png, "png argument cannot be null.");
         ByteBuffer directPng = png;
         if (!png.isDirect()) {
@@ -77,12 +78,10 @@ public class Bitmap implements Disposable, AutoCloseable {
             IntBuffer h = stack.mallocInt(1);
             IntBuffer c = stack.mallocInt(1);
             if (!stbi_info_from_memory(directPng, w, h, c)) {
-                throw new Exception(stbi_failure_reason());
-            } stbi_set_flip_vertically_on_load(true);
+                throw new IOException(stbi_failure_reason());
+            } // stbi_set_flip_vertically_on_load(true);
             this.pixels = stbi_load_from_memory(directPng, w, h, c, 0);
-            if (pixels == null) {
-                throw new Exception(stbi_failure_reason());
-            }
+            if (pixels == null) throw new IOException(stbi_failure_reason());
             this.width = w.get(0);
             this.height = h.get(0);
             this.channels = c.get(0);
@@ -100,6 +99,48 @@ public class Bitmap implements Disposable, AutoCloseable {
     public int sizeOf() { return width * height * channels; }
     public int width() { return width; }
     public int height() { return height; }
+
+
+    public void setPixel(int value, int x, int y) {
+        int p = (y * width + x) * channels;
+        for (int c = 0; c < channels; c++)
+            pixels.put(p + c,(byte) ((value >> (c * 8)) & 0xFF));
+    }
+
+    public int getPixel(int x, int y) {
+        int p = (y * width + x) * channels;
+        int pixel = 0;
+        for (int c = 0; c < channels; c++) {
+            pixel |= (pixels.get(p + c) & 0xFF) << (c * 8);
+        } return pixel;
+    }
+
+    public void blitRegion(Bitmap bitmap, int x, int y) {
+        if (bitmap == null || bitmap.width <= 0 || bitmap.height <= 0) return;
+        int dstMinX = Math.clamp(x, 0, width);
+        int dstMinY = Math.clamp(y, 0, height);
+        int dstMaxX = Math.clamp(x + bitmap.width, dstMinX, width);
+        int dstMaxY = Math.clamp(y + bitmap.height, dstMinY, height);
+        if (dstMinX >= dstMaxX || dstMinY >= dstMaxY) return;
+        if (bitmap.channels == 4) { // ~10x faster
+            int rowWidthBytes = (dstMaxX - dstMinX) * channels;
+            int oldPosition = pixels.position();
+            for (int dstY = dstMinY; dstY < dstMaxY; dstY++) {
+                int srcY = dstY - y;
+                int srcX = dstMinX - x;
+                int dstBytePos = (dstY * this.width + dstMinX) * channels;
+                int srcBytePos = (srcY * bitmap.width + srcX) * channels;
+                pixels.put(dstBytePos, bitmap.pixels, srcBytePos, rowWidthBytes);
+            }
+        } else for (int dstY = dstMinY; dstY < dstMaxY; dstY++) {
+            int srcY = dstY - y;
+            for (int dstX = dstMinX; dstX < dstMaxX; dstX++) {
+                int srcX = dstX - x;
+                int p = bitmap.getPixel(srcX, srcY);
+                setPixel(p, dstX, dstY);
+            }
+        }
+    }
 
     public void vFlip() {
         ByteBuffer src = pixels;
@@ -134,7 +175,7 @@ public class Bitmap implements Disposable, AutoCloseable {
                     chunk.get(array[0], 0, size);
                     out.write(array[0], 0, size); }
             }) {
-                stbi_flip_vertically_on_write(true);
+                // stbi_flip_vertically_on_write(true);
                 boolean success = STBImageWrite.stbi_write_png_to_func(callback,
                     0L, width, height, channels, pixels, stride());
                 if (!success) throw new IOException("Failed to encode bitmap via. stbi_write_png_to_func.");
@@ -147,11 +188,6 @@ public class Bitmap implements Disposable, AutoCloseable {
         if (stbAllocated) {
             stbi_image_free(pixels);
         } else MemoryUtil.memFree(pixels);
-    }
-
-    @Override
-    public void close() throws Exception {
-        free();
     }
 
     private static void assertValidDimensions(int width, int height, int channels) {

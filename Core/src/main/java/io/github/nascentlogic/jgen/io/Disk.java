@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.function.Predicate;
 
 public final class Disk {
 
@@ -26,6 +27,7 @@ public final class Disk {
     private static boolean DEV_MODE;
     private static Path GAME_ROOT;
     private static Path USER_DATA;
+    private static Path USER_CACHE;
     private static Gson GSON;
 
 
@@ -53,6 +55,7 @@ public final class Disk {
             DEV_MODE = !Files.isRegularFile(codeSourceLoc);
             GAME_ROOT = identifyGameRoot(codeSourceLoc);
             USER_DATA = identifyUserDirectory();
+            USER_CACHE = USER_DATA.resolve("cache");
             GSON = configureGson();
             configureLogger();
             INITIALIZED = true;
@@ -132,10 +135,10 @@ public final class Disk {
         } Path home = toPath(userHome);
         return switch (Platform.get()) {
             case WINDOWS -> { String env = System.getenv("APPDATA");
-                yield (env != null && !env.isBlank()) ? toPath(env) : resolve(home, "AppData", "Roaming");
-            } case MAC -> resolve(home, "Library", "Application Support");
+                yield (env != null && !env.isBlank()) ? toPath(env) : resolveAndConfine(home, "AppData", "Roaming");
+            } case MAC -> resolveAndConfine(home, "Library", "Application Support");
             case LINUX -> { String env = System.getenv("XDG_DATA_HOME");
-                yield (env != null && !env.isBlank()) ? toPath(env) : resolve(home, ".local", "share");
+                yield (env != null && !env.isBlank()) ? toPath(env) : resolveAndConfine(home, ".local", "share");
             }
         };
     }
@@ -151,7 +154,7 @@ public final class Disk {
         String companyName = GameModuleProperties.get(GameModuleProperties.GAME_COMPANY_NAME);
         gameName = gameName == null || gameName.isBlank() ? "Untitled-Game" : gameName.trim();
         companyName = companyName == null || companyName.isBlank() ? "JGEN" : companyName.trim();
-        return resolve(appDataRoot,companyName,gameName);
+        return resolveAndConfine(appDataRoot,companyName,gameName);
     }
 
     /**
@@ -254,7 +257,7 @@ public final class Disk {
      * @throws IOException if the file is missing, exceeds size limits, or is locked.
      */
     public static ByteBuffer gameLoadDirect(String first, String... more) throws IOException {
-        return load(resolve(gameRootDirectory(),first,more),true);
+        return load(resolveAndConfine(gameRootDirectory(),first,more),true);
     }
 
     /**
@@ -265,7 +268,7 @@ public final class Disk {
      * @throws IOException if the file is missing, exceeds size limits, or is locked.
      */
     public static ByteBuffer gameLoadHeap(String first, String... more) throws IOException {
-        return load(resolve(gameRootDirectory(),first,more),false);
+        return load(resolveAndConfine(gameRootDirectory(),first,more),false);
     }
 
     /**
@@ -276,7 +279,7 @@ public final class Disk {
      * @throws IOException if the file is missing, exceeds size limits, or is locked.
      */
     public static ByteBuffer userLoadDirect(String first, String... more) throws IOException {
-        return load(resolve(userDataDirectory(),first,more),true);
+        return load(resolveAndConfine(userDataDirectory(),first,more),true);
     }
 
     /**
@@ -287,7 +290,7 @@ public final class Disk {
      * @throws IOException if the file is missing, exceeds size limits, or is locked.
      */
     public static ByteBuffer userLoadHeap(String first, String... more) throws IOException {
-        return load(resolve(userDataDirectory(),first,more),false);
+        return load(resolveAndConfine(userDataDirectory(),first,more),false);
     }
 
     /**
@@ -354,7 +357,7 @@ public final class Disk {
      * @throws IOException if the file is missing or unreadable.
      */
     public static byte[] gameLoadBytes(String first, String... more) throws IOException {
-        return loadBytes(resolve(gameRootDirectory(),first,more));
+        return loadBytes(resolveAndConfine(gameRootDirectory(),first,more));
     }
 
     /**
@@ -365,7 +368,7 @@ public final class Disk {
      * @throws IOException if the file is missing or unreadable.
      */
     public static byte[] userLoadBytes(String first, String... more) throws IOException {
-        return loadBytes(resolve(userDataDirectory(),first,more));
+        return loadBytes(resolveAndConfine(userDataDirectory(),first,more));
     }
 
     /**
@@ -409,7 +412,7 @@ public final class Disk {
      * @throws IOException if the file is missing or unreadable.
      */
     public static String gameFileToString(String first, String... more) throws IOException {
-        return fileToString(resolve(gameRootDirectory(),first,more));
+        return fileToString(resolveAndConfine(gameRootDirectory(),first,more));
     }
 
     /**
@@ -420,7 +423,7 @@ public final class Disk {
      * @throws IOException if the file is missing or unreadable.
      */
     public static String userFileToString(String first, String... more) throws IOException {
-        return fileToString(resolve(userDataDirectory(),first,more));
+        return fileToString(resolveAndConfine(userDataDirectory(),first,more));
     }
 
     /**
@@ -525,7 +528,7 @@ public final class Disk {
      * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
      */
     public static  <T> T gameLoadJson(Class<T> clazz, String first, String... more) throws IOException {
-        return loadJson(clazz,resolve(gameRootDirectory(),first,more));
+        return loadJson(clazz, resolveAndConfine(gameRootDirectory(),first,more));
     }
 
     /**
@@ -538,7 +541,7 @@ public final class Disk {
      * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
      */
     public static  <T> T userLoadJson(Class<T> clazz, String first, String... more) throws IOException {
-        return loadJson(clazz,resolve(userDataDirectory(),first,more));
+        return loadJson(clazz, resolveAndConfine(userDataDirectory(),first,more));
     }
 
     /**
@@ -585,14 +588,14 @@ public final class Disk {
         return new Bitmap(loadDirect(first,more));
     }
     public static void userSavePng(Bitmap bitmap, String first, String... more) throws IOException {
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         savePng(bitmap,path);
     }
     public static void savePng(Bitmap bitmap, String first, String... more) throws IOException {
         savePng(bitmap,toPath(first,more));
     }
     public static void savePng(Bitmap bitmap, Path filePath) throws IOException {
-        Objects.requireNonNull(bitmap, "bitmap is null");
+        Objects.requireNonNull(bitmap, "Bitmap is null");
         fileSystemWrite(bitmap.compress(),filePath,false);
     }
 
@@ -612,7 +615,7 @@ public final class Disk {
      * @throws IOException if write access is denied or the I/O operation fails.
      */
     public static void userWrite(ByteBuffer content, String first, String... more) throws IOException {
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(content,path,false);
     }
 
@@ -625,7 +628,7 @@ public final class Disk {
      */
     public static void userWrite(byte[] content, String first, String... more) throws IOException {
         Objects.requireNonNull(content,"byte[] content is null");
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(ByteBuffer.wrap(content),path,false);
     }
 
@@ -638,7 +641,7 @@ public final class Disk {
      */
     public static void userWrite(String content, String first, String... more) throws IOException {
         Objects.requireNonNull(content,"String content is null");
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(StandardCharsets.UTF_8.encode(content),path,false);
     }
 
@@ -650,11 +653,15 @@ public final class Disk {
      * @throws IOException if write access is denied or serialization fails.
      */
     public static void userWriteJson(Object obj, String first, String... more) throws IOException {
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        writeJson(obj,resolveAndConfine(userDataDirectory(),first,more));
+    }
+
+    private static void writeJson(Object obj, Path filePath) throws IOException {
         String jsonString = objectToJson(gson(),obj);
         ByteBuffer content = StandardCharsets.UTF_8.encode(jsonString);
-        fileSystemWrite(content,path,false);
+        fileSystemWrite(content,filePath,false);
     }
+
 
     /**
      * Appends {@link ByteBuffer} data directly to the end of a file in {@code USER_DATA}.
@@ -664,7 +671,7 @@ public final class Disk {
      * @throws IOException if write access is denied or the append operation fails.
      */
     public static void userAppend(ByteBuffer content, String first, String... more) throws IOException {
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(content,path,true);
     }
 
@@ -677,7 +684,7 @@ public final class Disk {
      */
     public static void userAppend(byte[] content, String first, String... more) throws IOException {
         Objects.requireNonNull(content,"byte[] content is null");
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(ByteBuffer.wrap(content),path,true);
     }
 
@@ -690,7 +697,7 @@ public final class Disk {
      */
     public static void userAppend(String content, String first, String... more) throws IOException {
         Objects.requireNonNull(content,"String content is null");
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemWrite(StandardCharsets.UTF_8.encode(content),path,true);
     }
 
@@ -701,7 +708,7 @@ public final class Disk {
      * @throws IOException if the path points outside {@code USER_DATA} or deletion fails.
      */
     public static void userDelete(String first, String... more) throws IOException {
-        Path path = validateUserWriteAccess(resolve(userDataDirectory(),first,more));
+        Path path = resolveAndConfine(userDataDirectory(),first,more);
         fileSystemDelete(path);
     }
 
@@ -738,10 +745,8 @@ public final class Disk {
      * @throws IOException if the resulting path is invalid our point outside GAME_ROOT
      */
     public static Path gameRootDirectory(String first, String... more) throws IOException {
-        Path root = gameRootDirectory();
-        Path path = resolve(root,first,more);
-        if (path.startsWith(root)) return path;
-        throw new IOException("Path: \"" + path + "\" points outside GAME_ROOT");
+        return resolveAndConfine(gameRootDirectory(),first,more);
+
     }
 
     /**
@@ -759,11 +764,10 @@ public final class Disk {
      * @throws IOException if the resulting path is invalid our point outside USER_DATA
      */
     public static Path userDataDirectory(String first, String... more) throws IOException {
-        Path root = userDataDirectory();
-        Path path = resolve(root,first,more);
-        if (path.startsWith(root)) return path;
-        throw new IOException("Path: \"" + path + "\" points outside USER_DATA");
+        return resolveAndConfine(userDataDirectory(),first,more);
     }
+
+    public static Path userCacheDirectory() { return USER_CACHE; }
 
     /**
      * Logs are outputed here if running from .jar / .exe.
@@ -850,7 +854,7 @@ public final class Disk {
      */
     private static ByteBuffer fileSystemRead(Path filePath, boolean directAlloc) throws IOException {
         Objects.requireNonNull(filePath,"Path filePath is null");
-        Logger.info("Filesystem read: \"{}\"",filePath.toAbsolutePath());
+        Logger.debug("<-- \"{}\"",filePath.toAbsolutePath());
         if (!Files.isRegularFile(filePath,LinkOption.NOFOLLOW_LINKS))
             throw new FileNotFoundException("File not found or not a regular file: " + filePath.toAbsolutePath());
         long initialSize = Files.size(filePath); // If the file is too large, it throws outside (never enters the loop).
@@ -901,7 +905,7 @@ public final class Disk {
     private static void fileSystemWrite(ByteBuffer content, Path filePath, boolean append) throws IOException {
         Objects.requireNonNull(content, "ByteBuffer content is null");
         Objects.requireNonNull(filePath, "Path filePath is null");
-        Logger.info("Filesystem write: \"{}\"",filePath.toAbsolutePath());
+        Logger.debug("--> \"{}\"",filePath.toAbsolutePath());
         Path parent = filePath.getParent();
         if (parent != null) Files.createDirectories(parent);
         if (append) writeDirect(content, filePath, StandardOpenOption.APPEND);
@@ -961,6 +965,7 @@ public final class Disk {
     private static void fileSystemDelete(Path path) throws IOException {
         Objects.requireNonNull(path, "Path path is null");
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+        Logger.debug("<X> \"{}\"",path.toAbsolutePath());
         Files.walkFileTree(path, new SimpleFileVisitor<>() {
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                 try { Files.delete(file);
@@ -992,50 +997,47 @@ public final class Disk {
     //  HELPERS
     // **************************************************************************************
 
-
-
-
     /**
-     * Resolve a relative path against a root directory and normalize the result.
-     * <p>
-     * This method joins the two paths and collapses any redundant {@code .} or
-     * {@code ..} segments. It guards against environmental errors like invalid
-     * character combinations or filesystem mismatches.
-     * </p>
-     * @param root the base directory to resolve against.
-     * @param relative the relative path to be appended.
-     * @return a normalized, resolved Path.
-     * @throws IOException if the resulting path is invalid for the host OS, or
-     * if the paths belong to different FileSystem providers.
-     * @throws NullPointerException if either of the Path arguments are null.
+     * Resolves a relative path against an absolute root directory and enforces strict
+     * sandbox boundary confinement.
+     * <p>This method prevents directory traversal vulnerabilities (e.g., via {@code ..}
+     * segments or malicious absolute path overrides) by verifying that the fully
+     * resolved, normalized destination structurally resides within the designated root
+     * directory hierarchy.</p>
+     * @param root     the absolute base directory
+     * @param relative the relative path segment or filename to be appended
+     * @return a fully resolved, absolute, and normalized {@link Path} guaranteed to be
+     * contained within the provided root bounds
+     * @throws NullPointerException      if either {@code root} or {@code relative} is {@code null}
+     * @throws IOException               if the {@code root} path is not absolute, if the
+     * {@code relative} path is absolute, or if a
+     * {@link ProviderMismatchException} occurs due to mixed
+     * virtual or host filesystem instances
+     * @throws AccessDeniedException     if the normalized combination of the paths attempts
+     * to escape outside the structural boundary of the root directory
      */
-    private static Path resolve(Path root, Path relative) throws IOException {
+    public static Path resolveAndConfine(Path root, Path relative) throws IOException {
         Objects.requireNonNull(root, "Root Path object is null");
         Objects.requireNonNull(relative, "Relative Path object is null");
-        try { return root.resolve(relative).normalize();
-        } catch (InvalidPathException e) {
-            throw new IOException("The resulting path is invalid: " + relative, e);
+        // Strict contract validation
+        if (!root.isAbsolute()) throw new IOException("Root path must be absolute: \"" + root + "\"");
+        if (relative.isAbsolute()) throw new IOException("Relative path must be relative: \"" + relative + "\"");
+        // Resolve and systematically normalize the final path to collapse '..' traversal attempts
+        root = root.normalize();
+        Path resolved;
+        try { resolved = root.resolve(relative).normalize();
         } catch (ProviderMismatchException e) {
-            throw new IOException("FileSystem mismatch during resolution", e);
-        }
+            throw new IOException("FileSystem mismatch during sandbox resolution", e);
+        } // Secure the boundary against the normalized root anchor
+        if (!resolved.startsWith(root)) {
+            throw new AccessDeniedException("Access is confined to root bounds: " + root);
+        } return resolved;
     }
 
-    /**
-     * Resolve multiple path segments against a "root" directory.
-     * <p>
-     * This is a convenience helper that first converts the provided strings into
-     * a Path before performing the resolution.
-     * </p>
-     * @param root the base directory (e.g. USER_DATA or GAME_ROOT).
-     * @param first the first segment of the relative path.
-     * @param more optional additional path segments.
-     * @return a normalized, resolved Path.
-     * @throws IOException if any segments contain illegal characters,
-     * or if the resolution leads to an invalid system path.
-     * @throws NullPointerException if any of the provided segments are null.
-     */
-    private static Path resolve(Path root, String first, String... more) throws IOException {
-        return resolve(root, toPath(first, more));
+
+    /** @see #resolveAndConfine(Path, Path) */
+    public static Path resolveAndConfine(Path root, String first, String... more) throws IOException {
+        return resolveAndConfine(root, toPath(first, more));
     }
 
     /**
@@ -1205,18 +1207,6 @@ public final class Disk {
     }
 
     /**
-     * Makes sure the path is within the game's user data directory
-     * @param path absolute path
-     * @return the same path
-     * @throws AccessDeniedException if path leads outside of user data directory.
-     */
-    private static Path validateUserWriteAccess(Path path) throws AccessDeniedException {
-        if (!path.startsWith(USER_DATA)) {
-            throw new AccessDeniedException("user path leads outside the user data directory: " + path);
-        } return path;
-    }
-
-    /**
      * Allocates a {@link ByteBuffer} of the specified size.
      * @param size        the capacity of the buffer.
      * @param directAlloc if {@code true}, allocates direct memory; otherwise heap memory.
@@ -1225,5 +1215,183 @@ public final class Disk {
     private static ByteBuffer allocateBuffer(int size, boolean directAlloc) {
         return directAlloc ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
     }
+
+
+
+
+
+
+    // =============================================================================
+    // FILE SEARCH
+    // =============================================================================
+
+    /** A lightweight, immutable descriptor representing a file or folder.
+     * @param name         The isolated name of folder OR file WITHOUT the extension (never blank).
+     * @param extension    The file extension WITH the "." (E.g. ".png"), or empty string for directories.
+     * @param relativePath The relative path (E.g. "assets/images/duck.png").
+     * @param lastModified The last time (in milliseconds since the epoch) the file was modified.
+     * @param isDirectory  True if this token represents a directory. */
+    public record FileToken(String name, String extension, String relativePath, long lastModified, boolean isDirectory) implements Comparable<FileToken> {
+        public FileToken {
+            Objects.requireNonNull(name, "FileName cannot be null");
+            Objects.requireNonNull(extension, "Extension cannot be null");
+            Objects.requireNonNull(relativePath, "Relative path cannot be null");
+            if (name.isBlank()) throw new IllegalArgumentException("FileName cannot be blank");
+        } public int compareTo(FileToken o) {
+            if (this.isDirectory != o.isDirectory) {
+                return this.isDirectory ? -1 : 1;
+            } return this.name.compareToIgnoreCase(o.name);
+        } int fingerPrint() {
+            int result = 17;
+            result = 31 * result + name.hashCode();
+            result = 31 * result + Long.hashCode(lastModified);
+            return result;
+        }
+    }
+
+    public static List<FileToken> gameListFiles(String first, String... more) throws IOException {
+        return listFiles(gameRootDirectory(),toPath(first,more),null);
+    }
+
+    public static List<FileToken> gameListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
+        return listFiles(gameRootDirectory(),toPath(first,more),filter);
+    }
+
+    public static List<FileToken> userListFiles(String first, String... more) throws IOException {
+        return listFiles(userDataDirectory(),toPath(first,more),null);
+    }
+
+    public static List<FileToken> userListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
+        return listFiles(userDataDirectory(),toPath(first,more),filter);
+    }
+
+    public static TextureAtlas gameLoadAtlas(String name, String first, String... more) throws IOException {
+        Objects.requireNonNull(name,"Atlas name cannot be null");
+        if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
+        Path relativePath = toPath(first,more).normalize();
+        Path imagesPath = resolveAndConfine(GAME_ROOT,relativePath);    // images in game root
+        Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
+        Logger.debug("Loading atlas \"{}\"",name);
+
+        if (!pathIsDir(imagesPath)) {
+            // even though the atlas may be cached,
+            // the images path must exist
+            // cache is not deleted here
+            throw new IOException("Unable to locate atlas: \"" + imagesPath + "\".");
+        }
+        final String atlasNameSuffix = TextureAtlas.FILE_SUFFIX;
+        final String atlasFileName = name + atlasNameSuffix;
+        final FileToken[] cachedTokens = new FileToken[2];
+
+        /*
+        [Raw Image Folder]
+        ├── character.png (Modified: 2020)  --> Filename + File Size ──┐
+        ├── terrain.png   (Modified: 2024)  --> Filename + File Size ──┼─► [Deterministic Combined Hash]
+        └── weapon.png    (Modified: 2026)  --> Filename + File Size ──┘                │
+                                                                                        ▼
+                                                                         Is this identical to the
+                                                                         hash saved inside atlas.json?
+                                                                         ├── YES: Load Cache.
+                                                                         └── NO:  Repack! */
+        if (pathIsDir(cachePath)) {
+            try { List<FileToken> cacheTokens = listFiles(USER_CACHE, relativePath, token -> {
+                    if (!token.isDirectory() && token.name().equals(atlasFileName)) {
+                        String ext = token.extension();
+                        if (ext.equals(".json")) cachedTokens[0] = token;
+                        else if (ext.equals(".png")) cachedTokens[1] = token;
+                    } return false; });
+            } catch (IOException e) {
+                Logger.warn(e);
+            }
+        }
+
+        final int[] modifiedHash = {17};
+        List<FileToken> imageTokens = listFiles(GAME_ROOT, relativePath, token -> {
+            if (!token.isDirectory && token.extension.equals(".png")) {
+                modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
+                return true;
+            } return false;
+        });
+
+        if (cachedTokens[0] != null && cachedTokens[1] != null) {
+            Path cachePathJson = resolveAndConfine(USER_CACHE,cachedTokens[0].relativePath);
+            Path cachePathPng = resolveAndConfine(USER_CACHE,cachedTokens[1].relativePath);
+            if (imageTokens.isEmpty()) {
+                fileSystemDelete(cachePathJson);
+                fileSystemDelete(cachePathPng);
+            }
+            else try {
+                TextureAtlas textureAtlas = loadJson(TextureAtlas.class,cachePathJson);
+                if (textureAtlas != null && !textureAtlas.isOutdated(modifiedHash[0])) {
+                    Bitmap atlasBitmap = new Bitmap(load(cachePathPng,true));
+                    textureAtlas.setBitmap(atlasBitmap);
+                    textureAtlas.rebuildLookupMap();
+                    return textureAtlas;
+                }
+            } catch (IOException e) { Logger.warn(e);}
+        }
+
+        if (imageTokens.isEmpty())
+            throw new IOException("Unable to generate atlas: \""
+                    + imagesPath + "\". No source files.");
+
+
+        List<Bitmap> bitmaps    = new ArrayList<>(imageTokens.size());
+        List<String> names      = new ArrayList<>(imageTokens.size());
+        for (FileToken token : imageTokens) {
+            try { Path path = GAME_ROOT.resolve(token.relativePath);
+                bitmaps.add(new Bitmap(load(path,true)));
+                names.add(token.name);
+            } catch (Exception e) { Logger.warn(e);}
+        }
+
+        Logger.debug("Packing atlas \"{}\", ({} files)",name,bitmaps.size());
+        TextureAtlas atlas = new TextureAtlas(name,bitmaps,names,modifiedHash[0]);
+        for (Bitmap image : bitmaps) image.free();
+
+        Path atlasJsonPath = cachePath.resolve(atlasFileName + ".json");
+        Path atlasPngPath  = cachePath.resolve(atlasFileName + ".png");
+        Logger.debug("Saving to cache");
+        try { writeJson(atlas,atlasJsonPath);
+            Bitmap atlasBitmap = atlas.bitmap();
+            if (atlasBitmap != null) savePng(atlasBitmap,atlasPngPath);
+        } catch (IOException e) {
+            Logger.warn(e,"Failed to cache atlas");
+        } return atlas;
+    }
+
+
+
+    private static List<FileToken> listFiles(Path root, Path relative, Predicate<FileToken> filter) throws IOException {
+        Path directoryPath = resolveAndConfine(root, relative);
+        if (!pathIsDir(directoryPath)) throw new IOException("Target path is not a directory: " + directoryPath);
+        Path normalizedRoot = root.normalize();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
+            List<FileToken> tokens = new ArrayList<>();
+            for (Path entry : stream) {
+                if (!pathExists(entry)) continue;
+                Path fileNamePath = entry.getFileName();
+                if (fileNamePath == null) continue;
+                String rawName = fileNamePath.toString();
+                if (rawName.isBlank()) continue;
+                boolean isDirectory = pathIsDir(entry);
+                var attributes = Files.readAttributes(entry, BasicFileAttributes.class);
+                long lastModified = attributes.lastModifiedTime().toMillis();
+                String name = rawName;
+                String extension = "";
+                if (!isDirectory) {
+                    int dotIndex = rawName.lastIndexOf('.');
+                    if (dotIndex > 0 && dotIndex < rawName.length() - 1) {
+                        name = rawName.substring(0, dotIndex);
+                        extension = rawName.substring(dotIndex);
+                    }
+                }
+                String tokenPath = normalizedRoot.relativize(entry).toString().replace('\\', '/');
+                FileToken token = new FileToken(name, extension, tokenPath, lastModified, isDirectory);
+                if (filter == null || filter.test(token)) tokens.add(token);
+            } return tokens;
+        }
+    }
+
 
 }

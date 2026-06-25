@@ -198,7 +198,7 @@ public class BipedLocomotion6 {
         }
 
         /**
-         * Calculates the virtual z-axis lift arc height based on current step progress
+         * Calculates the virtual z-axis lift arc h based on current step progress
          */
         public float getStepHeight(float maxStepHeight) {
             if (!isStepping) {

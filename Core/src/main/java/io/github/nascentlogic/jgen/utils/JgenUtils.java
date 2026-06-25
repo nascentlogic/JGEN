@@ -24,6 +24,21 @@ public class JgenUtils {
         };
     }
 
+    /** Formats a nanosecond time duration value into a human-readable String */
+    public static String formatNanos(long nanos) {
+        if (nanos <= 0) return "0 ns";
+        double us = nanos / 1000.0;
+        if (us < 1.0) return nanos + " ns";
+        double ms = us / 1000.0;
+        if (ms < 1.0) return Math.round(us) + " μs";
+        double s = ms / 1000.0;
+        if (s < 1.0) return String.format("%.1f ms", ms);
+        double m = s / 60.0;
+        if (m < 1.0) return String.format("%.2f s", s);
+        double h = m / 60.0;
+        if (h < 1.0) return String.format("%.2f m", m);
+        return String.format("%.2f h", h);
+    }
 
 
 }

@@ -77,8 +77,8 @@ public final class Jgen {
 
         try {
             Logger.info("STARTING GAME");
+            time = new JgenTime(); // todo: should start after game.start()
             game.start();
-            time = new JgenTime();
             Logger.info("ENTERING MAINLOOP");
 
             while (!window.shouldClose()) {
