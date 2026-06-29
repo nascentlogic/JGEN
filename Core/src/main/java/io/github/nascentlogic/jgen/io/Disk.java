@@ -17,6 +17,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 public final class Disk {
 
@@ -591,13 +592,15 @@ public final class Disk {
         Path path = resolveAndConfine(userDataDirectory(),first,more);
         savePng(bitmap,path);
     }
-    public static void savePng(Bitmap bitmap, String first, String... more) throws IOException {
-        savePng(bitmap,toPath(first,more));
-    }
     public static void savePng(Bitmap bitmap, Path filePath) throws IOException {
         Objects.requireNonNull(bitmap, "Bitmap is null");
         fileSystemWrite(bitmap.compress(),filePath,false);
     }
+
+
+
+
+
 
 
     // **************************************************************************************
@@ -1219,24 +1222,24 @@ public final class Disk {
 
 
 
-
-
     // =============================================================================
     // FILE SEARCH
     // =============================================================================
 
+
+
     /** A lightweight, immutable descriptor representing a file or folder.
      * @param name         The isolated name of folder OR file WITHOUT the extension (never blank).
      * @param extension    The file extension WITH the "." (E.g. ".png"), or empty string for directories.
-     * @param relativePath The relative path (E.g. "assets/images/duck.png").
+     * @param path         The absolute path (E.g. "[root]/assets/images/duck.png").
      * @param lastModified The last time (in milliseconds since the epoch) the file was modified.
      * @param isDirectory  True if this token represents a directory. */
-    public record FileToken(String name, String extension, String relativePath, long lastModified, boolean isDirectory) implements Comparable<FileToken> {
+    public record FileToken(String name, String extension, String path, long lastModified, boolean isDirectory) implements Comparable<FileToken> {
         public FileToken {
-            Objects.requireNonNull(name, "FileName cannot be null");
-            Objects.requireNonNull(extension, "Extension cannot be null");
-            Objects.requireNonNull(relativePath, "Relative path cannot be null");
-            if (name.isBlank()) throw new IllegalArgumentException("FileName cannot be blank");
+            Objects.requireNonNull(path);
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(extension);
+            if (name.isBlank()) throw new IllegalArgumentException("name cannot be blank");
         } public int compareTo(FileToken o) {
             if (this.isDirectory != o.isDirectory) {
                 return this.isDirectory ? -1 : 1;
@@ -1250,63 +1253,127 @@ public final class Disk {
     }
 
     public static List<FileToken> gameListFiles(String first, String... more) throws IOException {
-        return listFiles(gameRootDirectory(),toPath(first,more),null);
+        return listFiles(resolveAndConfine(gameRootDirectory(),toPath(first,more)));
     }
 
     public static List<FileToken> gameListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
-        return listFiles(gameRootDirectory(),toPath(first,more),filter);
+        return listFiles(resolveAndConfine(gameRootDirectory(),toPath(first,more)),filter);
     }
 
     public static List<FileToken> userListFiles(String first, String... more) throws IOException {
-        return listFiles(userDataDirectory(),toPath(first,more),null);
+        return listFiles(resolveAndConfine(userDataDirectory(),toPath(first,more)));
     }
 
     public static List<FileToken> userListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
-        return listFiles(userDataDirectory(),toPath(first,more),filter);
+        return listFiles(resolveAndConfine(userDataDirectory(),toPath(first,more)),filter);
+    }
+
+    public static List<FileToken> listFiles(Path directoryPath) throws IOException {
+        return listFiles(directoryPath,null);
+    }
+
+    public static List<FileToken> listFiles(Path directoryPath, Predicate<FileToken> filter) throws IOException {
+        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
+            return filter == null ? stream.toList() : stream.filter(filter).toList();
+        }
+    }
+
+    @SuppressWarnings("resource")
+    private static Stream<FileToken> streamDirectory(Path directoryPath) throws IOException {
+        if (!pathIsDir(directoryPath)) {
+            throw new IOException("Target path is not a directory: " + directoryPath);
+        } Stream<Path> pathStream = Files.list(directoryPath.toAbsolutePath().normalize());
+        return pathStream.map(Disk::pathToToken).filter(Objects::nonNull);
+    }
+
+    /* single usage private method. we know the path to be absolute before calling this */
+    private static FileToken pathToToken(Path absolutePath) {
+        if (!pathExists(absolutePath)) return null;
+        Path fileNamePath = absolutePath.getFileName();
+        String fileName = fileNamePath == null ? "" : fileNamePath.toString();
+        if (fileName.isBlank()) return null; // Safely skip root directories
+        try { var attributes = Files.readAttributes(absolutePath, BasicFileAttributes.class);
+            long lastModified = attributes.lastModifiedTime().toMillis();
+            boolean isDirectory = attributes.isDirectory();
+            String tokenName = fileName;
+            String extension = "";
+            if (!isDirectory) {
+                int dotIndex = fileName.lastIndexOf('.');
+                if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+                    tokenName = fileName.substring(0, dotIndex);
+                    extension = fileName.substring(dotIndex); }
+            } return new FileToken(tokenName, extension, absolutePath.toString(), lastModified, isDirectory);
+        } catch (IOException e) { Logger.warn(e,"Failed to read file attributes: \"{}\"", absolutePath);
+            return null;
+        }
+    }
+
+
+    public static List<Shader> gameLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(gameRootDirectory(first,more));
+    }
+
+    public static List<Shader> userLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(userDataDirectory(first,more));
+    }
+
+    public static List<Shader> loadShaders(Path directoryPath) throws IOException {
+        if (!pathIsDir(Objects.requireNonNull(directoryPath)))
+            throw new IOException("Target path is not a directory: " + directoryPath);
+        Map<String, Shader.File[]> map = new HashMap<>();
+        final Shader.Type[] types = Shader.Type.array;
+        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
+            stream.filter(token -> !token.isDirectory()).forEach(token -> {
+                for (Shader.Type type : types) {
+                    if (token.extension.equals(type.extension)) {
+                        try { String sourceCode = fileToString(Path.of(token.path));
+                            Shader.File[] files = map.computeIfAbsent(token.name, k -> new Shader.File[3]);
+                            files[type.ordinal()] = new Shader.File(type, sourceCode);
+                        } catch (IOException e) { Logger.warn(e); }
+                        break;
+                    }
+                }
+            });
+        } if (map.isEmpty()) return List.of();
+        List<Shader> list = new ArrayList<>(map.size());
+        var entrySet = map.entrySet();
+        for (var entry : entrySet) {
+            Shader shader = new Shader(entry.getKey(), entry.getValue());
+            if (shader.isComplete()) {
+                list.add(shader);
+            } else Logger.warn("Shader: \"{}\", missing file/s",shader.name());
+        } return list;
     }
 
     public static TextureAtlas gameLoadAtlas(String name, String first, String... more) throws IOException {
-        Objects.requireNonNull(name,"Atlas name cannot be null");
+        Objects.requireNonNull(name);
         if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
         Path relativePath = toPath(first,more).normalize();
         Path imagesPath = resolveAndConfine(GAME_ROOT,relativePath);    // images in game root
         Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
-        Logger.debug("Loading atlas \"{}\"",name);
-
         if (!pathIsDir(imagesPath)) {
             // even though the atlas may be cached,
             // the images path must exist
             // cache is not deleted here
             throw new IOException("Unable to locate atlas: \"" + imagesPath + "\".");
         }
-        final String atlasNameSuffix = TextureAtlas.FILE_SUFFIX;
-        final String atlasFileName = name + atlasNameSuffix;
+
+        final String atlasFileName = name + TextureAtlas.FILE_SUFFIX;
         final FileToken[] cachedTokens = new FileToken[2];
 
-        /*
-        [Raw Image Folder]
-        ├── character.png (Modified: 2020)  --> Filename + File Size ──┐
-        ├── terrain.png   (Modified: 2024)  --> Filename + File Size ──┼─► [Deterministic Combined Hash]
-        └── weapon.png    (Modified: 2026)  --> Filename + File Size ──┘                │
-                                                                                        ▼
-                                                                         Is this identical to the
-                                                                         hash saved inside atlas.json?
-                                                                         ├── YES: Load Cache.
-                                                                         └── NO:  Repack! */
+
         if (pathIsDir(cachePath)) {
-            try { List<FileToken> cacheTokens = listFiles(USER_CACHE, relativePath, token -> {
-                    if (!token.isDirectory() && token.name().equals(atlasFileName)) {
-                        String ext = token.extension();
-                        if (ext.equals(".json")) cachedTokens[0] = token;
-                        else if (ext.equals(".png")) cachedTokens[1] = token;
-                    } return false; });
-            } catch (IOException e) {
-                Logger.warn(e);
-            }
+            try (Stream<FileToken> stream = streamDirectory(cachePath)) {
+                stream.filter(token -> !token.isDirectory() && token.name().equals(atlasFileName))
+                        .forEach(token -> {
+                            String ext = token.extension();
+                            if (ext.equals(".json")) cachedTokens[0] = token;
+                            else if (ext.equals(".png")) cachedTokens[1] = token; });
+            } catch (IOException e) { Logger.warn(e); }
         }
 
         final int[] modifiedHash = {17};
-        List<FileToken> imageTokens = listFiles(GAME_ROOT, relativePath, token -> {
+        List<FileToken> imageTokens = listFiles(imagesPath, token -> {
             if (!token.isDirectory && token.extension.equals(".png")) {
                 modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
                 return true;
@@ -1314,8 +1381,8 @@ public final class Disk {
         });
 
         if (cachedTokens[0] != null && cachedTokens[1] != null) {
-            Path cachePathJson = resolveAndConfine(USER_CACHE,cachedTokens[0].relativePath);
-            Path cachePathPng = resolveAndConfine(USER_CACHE,cachedTokens[1].relativePath);
+            Path cachePathJson = Path.of(cachedTokens[0].path);
+            Path cachePathPng  = Path.of(cachedTokens[1].path);
             if (imageTokens.isEmpty()) {
                 fileSystemDelete(cachePathJson);
                 fileSystemDelete(cachePathPng);
@@ -1339,8 +1406,7 @@ public final class Disk {
         List<Bitmap> bitmaps    = new ArrayList<>(imageTokens.size());
         List<String> names      = new ArrayList<>(imageTokens.size());
         for (FileToken token : imageTokens) {
-            try { Path path = GAME_ROOT.resolve(token.relativePath);
-                bitmaps.add(new Bitmap(load(path,true)));
+            try { bitmaps.add(new Bitmap(load(Path.of(token.path),true)));
                 names.add(token.name);
             } catch (Exception e) { Logger.warn(e);}
         }
@@ -1362,36 +1428,10 @@ public final class Disk {
 
 
 
-    private static List<FileToken> listFiles(Path root, Path relative, Predicate<FileToken> filter) throws IOException {
-        Path directoryPath = resolveAndConfine(root, relative);
-        if (!pathIsDir(directoryPath)) throw new IOException("Target path is not a directory: " + directoryPath);
-        Path normalizedRoot = root.normalize();
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directoryPath)) {
-            List<FileToken> tokens = new ArrayList<>();
-            for (Path entry : stream) {
-                if (!pathExists(entry)) continue;
-                Path fileNamePath = entry.getFileName();
-                if (fileNamePath == null) continue;
-                String rawName = fileNamePath.toString();
-                if (rawName.isBlank()) continue;
-                boolean isDirectory = pathIsDir(entry);
-                var attributes = Files.readAttributes(entry, BasicFileAttributes.class);
-                long lastModified = attributes.lastModifiedTime().toMillis();
-                String name = rawName;
-                String extension = "";
-                if (!isDirectory) {
-                    int dotIndex = rawName.lastIndexOf('.');
-                    if (dotIndex > 0 && dotIndex < rawName.length() - 1) {
-                        name = rawName.substring(0, dotIndex);
-                        extension = rawName.substring(dotIndex);
-                    }
-                }
-                String tokenPath = normalizedRoot.relativize(entry).toString().replace('\\', '/');
-                FileToken token = new FileToken(name, extension, tokenPath, lastModified, isDirectory);
-                if (filter == null || filter.test(token)) tokens.add(token);
-            } return tokens;
-        }
-    }
+
+
+
+
 
 
 }

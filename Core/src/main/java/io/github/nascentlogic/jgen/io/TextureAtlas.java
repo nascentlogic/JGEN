@@ -1,7 +1,6 @@
 package io.github.nascentlogic.jgen.io;
 
-import io.github.nascentlogic.jgen.Disposable;
-import io.github.nascentlogic.jgen.Jgen;
+import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.gfx.Bitmap;
 import io.github.nascentlogic.jgen.utils.AtlasPacker;
 import io.github.nascentlogic.jgen.utils.TextureRegion;
@@ -74,11 +73,9 @@ public class TextureAtlas implements Disposable {
             Logger.warn("Packing resulted in zero valid regions.");
             return List.of();
         }
-
         Disposable.free(bitmap); // redundant but fine
         bitmap = new Bitmap(size.x,size.y,bitmapChannels);
         List<Entry> entries = new ArrayList<>(packResult.size());
-
         for (AtlasPacker.Region result : packResult) {
             Bitmap atlasRegion = bitmaps.get(result.id());
             String name = names.get(result.id());

@@ -1,7 +1,9 @@
 package org.example;
 
 import io.github.nascentlogic.jgen.*;
+import io.github.nascentlogic.jgen.gfx.Program;
 import io.github.nascentlogic.jgen.io.Disk;
+import io.github.nascentlogic.jgen.io.Shader;
 import io.github.nascentlogic.jgen.io.TextureAtlas;
 import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.joml.Vector2i;
@@ -38,18 +40,17 @@ public class TestGame implements Game {
 
         Window window = Jgen.get().window();
 
-        List<Disk.FileToken> tokens = Disk.gameListFiles("assets");
-
 
         long time = Jgen.get().time().runTimeNS();
         TextureAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
         time = Jgen.get().time().runTimeNS() - time;
-
         Logger.info("Time: {}", JgenUtils.formatNanos(time));
 
-        //try (Bitmap image = Disk.gameLoadPng("assets","test.png");){
-        //    Disk.userSavePng(image,"folder","test.png");
-        //}
+        List<Shader> shaders = Disk.gameLoadShaders("assets","shaders");
+        new Program(shaders.getFirst());
+
+        int y = 0;
+
 
         // window.toggleVsync(true);
         // List<Window.Monitor> monitors = window.connectedMonitors();

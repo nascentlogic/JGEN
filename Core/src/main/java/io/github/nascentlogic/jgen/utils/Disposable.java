@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen;
+package io.github.nascentlogic.jgen.utils;
 
 /**
  * Disposable is meant for resources allocated outside the Java heap.

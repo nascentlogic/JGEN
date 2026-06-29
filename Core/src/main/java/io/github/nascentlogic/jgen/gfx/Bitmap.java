@@ -1,7 +1,6 @@
 package io.github.nascentlogic.jgen.gfx;
 
-import io.github.nascentlogic.jgen.Disposable;
-import io.github.nascentlogic.jgen.Jgen;
+import io.github.nascentlogic.jgen.utils.Disposable;
 import org.lwjgl.stb.STBIWriteCallback;
 import org.lwjgl.stb.STBImageWrite;
 import org.lwjgl.system.MemoryStack;
@@ -17,7 +16,6 @@ import java.util.Objects;
 import static org.lwjgl.stb.STBImage.*;
 import static org.lwjgl.stb.STBImage.stbi_failure_reason;
 import static org.lwjgl.stb.STBImage.stbi_load_from_memory;
-import static org.lwjgl.stb.STBImageWrite.stbi_flip_vertically_on_write;
 import static org.lwjgl.system.MemoryStack.stackPush;
 
 /**
