@@ -181,6 +181,43 @@ public class Bitmap implements Disposable {
         }
     }
 
+
+    public Texture toTexture() { return toTexture(false); }
+    public Texture toTexture(boolean mipmap) { return toTexture(mipmap,false); }
+    public Texture toTexture(boolean mipmap, boolean srgb) {
+        Texture texture = Texture.generate2D(width,height);
+        TextureFormat format = switch(channels) {
+            case 1 -> TextureFormat.R8;
+            case 2 -> TextureFormat.RG8;
+            case 3 -> srgb ? TextureFormat.SRGB8 : TextureFormat.RGB8;
+            case 4 -> srgb ? TextureFormat.SRGBA8 : TextureFormat.RGBA8;
+            default -> throw new IllegalStateException("Channels > 4");
+        }; texture.allocate(format,mipmap);
+        texture.upload(pixels);
+        texture.clampToBorder();
+        texture.filterNearest();
+        return texture;
+    }
+
+    /*
+    public Texture asTexture(boolean mipmap, boolean srgb) {
+        Texture texture = Texture.generate2D(width,height);
+        TextureFormat format;
+        switch (channels) {
+            case 1  -> format = TextureFormat.R8_UNSIGNED_NORMALIZED;
+            case 2  -> format = TextureFormat.RG8_UNSIGNED_NORMALIZED;
+            case 3  -> format = srgb ? TextureFormat.SRGB8_UNSIGNED_NORMALIZED : TextureFormat.RGB8_UNSIGNED_NORMALIZED;
+            case 4  -> format = srgb ? TextureFormat.SRGBA8_UNSIGNED_NORMALIZED : TextureFormat.RGBA8_UNSIGNED_NORMALIZED;
+            default -> format = TextureFormat.INVALID;
+        } texture.bindToSlot(0);
+        texture.allocate(format,mipmap);
+        texture.uploadSubData(pixels);
+        texture.clampToBorder();
+        texture.filterNearest();
+        return texture;
+    }
+     */
+
     @Override
     public void free() {
         if (stbAllocated) {

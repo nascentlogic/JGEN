@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.Consumer;
 
-import static io.github.nascentlogic.jgen.utils.JgenMath.nextPowerOfTwo;
+import static io.github.nascentlogic.jgen.utils.JgenMath.nextPow2;
 
 /**
  * F.Dahl, 5/6/2026
@@ -60,7 +60,7 @@ public final class JgenlLogWriter implements Writer {
         private final int mask;
 
         OptimizedEvictingQueue(int capacity) {
-            this.capacity = nextPowerOfTwo(Math.max(16, capacity));
+            this.capacity = nextPow2(Math.max(16, capacity));
             this.buffer = new AtomicReferenceArray<>(this.capacity);
             this.mask = this.capacity - 1;
         }

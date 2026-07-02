@@ -23,13 +23,31 @@ import static org.lwjgl.opengl.GL43.*;
  */
 public class Program implements Disposable {
 
+    private static final class SamplerManager {
+        final Map<String,Integer> map = HashMap.newHashMap(16);
+        int nextAvailable = 0;
+        void assignAndBind(String uniformName, Texture texture) {
+            Objects.requireNonNull(uniformName);
+            Objects.requireNonNull(texture);
+            Integer assignedUnit = map.get(uniformName);
+            if (assignedUnit == null) {
+                int location = getUniformLocation(uniformName);
+                if (!validUniformLocation(location)) return;
+                assignedUnit = nextAvailable++;
+                map.put(uniformName, assignedUnit);
+                glUniform1i(location, assignedUnit);
+            } texture.bindToSlot(assignedUnit);
+        }
+    }
+
     private static final Map<String,Program> PROGRAM_MAP = HashMap.newHashMap(64);
     private static Program CURRENT_PROGRAM = null;
     private static int INVALID_UNIFORM_LOCATION = -1;
 
     private int handle;
     private final String name;
-    private final Map<String,Integer> uniforms;
+    private final SamplerManager samplerManager;
+    private final Map<String,Integer> uniformCache;
     private final Set<String> invalidUniformSet;
 
     /**
@@ -57,8 +75,9 @@ public class Program implements Disposable {
             glDeleteProgram(handle);
             Logger.warn("Shader linking error: \"{}\"", name);
             throw new Exception(log);
-        } uniforms = uniformLocationMap(handle);
+        } uniformCache = uniformLocationMap(handle);
         invalidUniformSet = HashSet.newHashSet(16);
+        samplerManager = new SamplerManager();
         Program existing = PROGRAM_MAP.put(name,this);
         if (existing != null) {
             existing.free();
@@ -117,6 +136,11 @@ public class Program implements Disposable {
             program.handle = GL_NONE;
         }); PROGRAM_MAP.clear();
         useNone();
+    }
+
+    public static void setTexture(String name, Texture texture) {
+        if (CURRENT_PROGRAM == null) throw new IllegalStateException("No bound Program");
+        CURRENT_PROGRAM.samplerManager.assignAndBind(name,texture);
     }
 
     public static void setUniformI(String name, int i) {
@@ -525,7 +549,7 @@ public class Program implements Disposable {
     private static int getUniformLocation(String name) {
         Objects.requireNonNull(name);
         if (CURRENT_PROGRAM == null) throw new IllegalStateException("No bound Program");
-        int uniformLocation = CURRENT_PROGRAM.uniforms.getOrDefault(name,INVALID_UNIFORM_LOCATION);
+        int uniformLocation = CURRENT_PROGRAM.uniformCache.getOrDefault(name,INVALID_UNIFORM_LOCATION);
         if (uniformLocation == INVALID_UNIFORM_LOCATION) {
             if (CURRENT_PROGRAM.invalidUniformSet.add(name)) // prevent log output clutter
                 Logger.warn("No such uniform: \"{}\" for Program: \"{}\"",name,CURRENT_PROGRAM.name);
@@ -583,6 +607,9 @@ public class Program implements Disposable {
             }
         } return versionHeader;
     }
+
+
+
 
 
 }

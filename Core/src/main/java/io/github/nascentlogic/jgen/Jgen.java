@@ -19,6 +19,8 @@ import static io.github.nascentlogic.jgen.utils.JgenUtils.formatBytes;
 import static org.joml.Math.min;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.GL_OUT_OF_MEMORY;
+import static org.lwjgl.opengl.GL30.GL_MAJOR_VERSION;
+import static org.lwjgl.opengl.GL30.GL_MINOR_VERSION;
 import static org.lwjgl.opengl.GL30C.GL_INVALID_FRAMEBUFFER_OPERATION;
 
 /**
@@ -51,6 +53,18 @@ public final class Jgen {
     private JgenTime time;
     public JgenTime time() { return time; }
 
+    private int glVersionMajor;
+    private int glVersionMinor;
+    public int glVersionMajor() { return glVersionMajor; }
+    public int glVersionMinor() { return glVersionMinor; }
+    public boolean glVersionTest(int major, int minor) {
+        if (glVersionMajor < major) return false;
+        if (glVersionMajor > major) return true;
+        return glVersionMinor >= minor;
+    } public boolean supportsImmutableStorage() {
+        return glVersionTest(4,2);
+    }
+
     public void exit() { window.signalToClose(); }
 
 
@@ -73,6 +87,16 @@ public final class Jgen {
         try {
             Logger.info("CREATING WINDOW");
             window = new Window(config);
+
+            // cache gl capabilities
+            try (MemoryStack stack = MemoryStack.stackPush()){
+                IntBuffer buffer = stack.mallocInt(1);
+                glGetIntegerv(GL_MAJOR_VERSION, buffer);
+                glVersionMajor = buffer.get(0);
+                glGetIntegerv(GL_MINOR_VERSION, buffer);
+                glVersionMajor = buffer.get(0);
+            }
+
         } catch (Exception e) {
             Logger.error(e);
             return;
@@ -137,6 +161,8 @@ public final class Jgen {
             Logger.warn("GL_ERROR: {} at {}", error, location);
         }
     }
+
+
 
     private static void logSystemInfo() {
         StringBuilder sb = new StringBuilder(1024);

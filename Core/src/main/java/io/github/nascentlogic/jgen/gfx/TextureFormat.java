@@ -71,7 +71,7 @@ public enum TextureFormat {
     RGBA8UI(GL_RGBA8UI, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, 4, 4, true),
     RGBA8_SNORM(GL_RGBA8_SNORM, GL_RGBA, GL_BYTE, 4, 4, true),
     RGBA8(GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, 4, true),
-    SRGB8_ALPHA8(GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, 4, true);
+    SRGBA8(GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, 4, true);
 
     /** The explicit sized allocation format token on the GPU (e.g., GL_RGBA8, GL_R32F). */
     public final int sizedFormat;

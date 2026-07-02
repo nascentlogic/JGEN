@@ -6,7 +6,7 @@ import org.tinylog.Logger;
 
 import java.util.*;
 
-import static io.github.nascentlogic.jgen.utils.JgenMath.nextPowerOfTwo;
+import static io.github.nascentlogic.jgen.utils.JgenMath.nextPow2;
 
 /**
  * F.Dahl, 6/21/2026
@@ -81,7 +81,7 @@ public class AtlasPacker {
             rectMaxW = Math.max(rectMaxW,rect.w);
         }
 
-        int atlasW = nextPowerOfTwo(Math.max(rectMaxW, rectMaxH));
+        int atlasW = nextPow2(Math.max(rectMaxW, rectMaxH));
         int atlasH = atlasW;
 
         // Area estimation loop: Favors growing horizontally first
