@@ -1,18 +1,9 @@
 package org.example;
 
 import io.github.nascentlogic.jgen.*;
-import io.github.nascentlogic.jgen.gfx.Program;
-import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.io.Shader;
-import io.github.nascentlogic.jgen.io.TextureAtlas;
-import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.joml.Vector2i;
 import org.joml.Vector4i;
 import org.joml.primitives.Rectanglef;
-import org.tinylog.Logger;
-
-import java.util.List;
-
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER;
@@ -38,20 +29,15 @@ public class TestGame implements Game {
 
     public void start() throws Exception {
 
-        Window window = Jgen.get().window();
+        // long time = Jgen.get().time().runTimeNS();
+        // TextureAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
+        // time = Jgen.get().time().runTimeNS() - time;
+        // Logger.info("Time: {}", JgenUtils.formatNanos(time));
 
+        // List<Shader> shaders = Disk.gameLoadShaders("assets","shaders");
+        // new Program(shaders.getFirst());
 
-        long time = Jgen.get().time().runTimeNS();
-        TextureAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
-        time = Jgen.get().time().runTimeNS() - time;
-        Logger.info("Time: {}", JgenUtils.formatNanos(time));
-
-        List<Shader> shaders = Disk.gameLoadShaders("assets","shaders");
-        new Program(shaders.getFirst());
-
-        int y = 0;
-
-
+        // Window window = Jgen.get().window();
         // window.toggleVsync(true);
         // List<Window.Monitor> monitors = window.connectedMonitors();
         // for (Window.Monitor monitor : monitors) {

@@ -385,6 +385,7 @@ public final class Window {
         return dst.set(framebufferRes);
     }
 
+
     Vector4i viewport() { return viewport; }
     Vector2i windowSize() { return windowSize; }
     Vector2i framebufferResolution() { return framebufferRes; }

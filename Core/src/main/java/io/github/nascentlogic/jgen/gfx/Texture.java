@@ -24,6 +24,7 @@ import static org.lwjgl.opengl.GL42.*;
  */
 public class Texture implements Disposable {
 
+    public static final int MSAA_SAMPLES = 4;
     private static long MEMORY_USED;
     private static long MEMORY_PEAK;
     private static final int[] SUPPORTED_TEXTURE_TARGETS = {
@@ -43,6 +44,11 @@ public class Texture implements Disposable {
     private boolean disposed;
     private boolean allocated;
 
+    public static Texture generate1D(int width) { return new Texture(width,1,1,GL_TEXTURE_1D); }
+    public static Texture generate2D(int width, int height) { return new Texture(width,height,1,GL_TEXTURE_2D); }
+    public static Texture generate3D(int width, int height, int depth) { return new Texture(width,height,depth,GL_TEXTURE_3D); }
+    public static Texture generateArray1D(int width, int layers) { return new Texture(width,layers,1,GL_TEXTURE_1D_ARRAY); }
+    public static Texture generateArray2D(int width, int height, int layers) { return new Texture(width,height,layers,GL_TEXTURE_2D_ARRAY); }
     private Texture(int width, int height, int depth, int target) {
         if (!isSupportedTarget(target)) throw new IllegalArgumentException("Unsupported texture target");
         if (width < 1 || height < 1 || depth < 1) throw new IllegalArgumentException("Texture dimensions must be > 0");
@@ -52,12 +58,6 @@ public class Texture implements Disposable {
         this.depth  = depth;
         this.target = target;
     }
-
-    public static Texture generate1D(int width) { return new Texture(width,1,1,GL_TEXTURE_1D); }
-    public static Texture generate2D(int width, int height) { return new Texture(width,height,1,GL_TEXTURE_2D); }
-    public static Texture generate3D(int width, int height, int depth) { return new Texture(width,height,depth,GL_TEXTURE_3D); }
-    public static Texture generateArray1D(int width, int layers) { return new Texture(width,layers,1,GL_TEXTURE_1D_ARRAY); }
-    public static Texture generateArray2D(int width, int height, int layers) { return new Texture(width,height,layers,GL_TEXTURE_2D_ARRAY); }
 
     public int handle() { return handle; }
     public int target() { return target; }
@@ -113,8 +113,7 @@ public class Texture implements Disposable {
     }
 
     public void generateMipmap() {
-        if (disposed) throw new IllegalStateException("Texture has been disposed");
-        if (!allocated) throw new IllegalStateException("Texture is not allocated");
+        if (disposed || !allocated) throw new IllegalStateException("Texture is disposed or unallocated");
         if (mipLevels > 1) glGenerateMipmap(target);
         else Logger.warn("Attempt to generate mipmaps on texture not allocated for mipmaps");
     }
@@ -144,29 +143,50 @@ public class Texture implements Disposable {
         return dst.set(mipW, mipH, mipD);
     }
 
+    public void parameteri(int pname, int param) { glTexParameteri(target, pname, param); }
+    public void parameterf(int pname, float param) { glTexParameterf(target, pname, param); }
+    public void filterNearest() { filter(GL_NEAREST,GL_NEAREST); }
+    public void filterLinear() { filter(GL_LINEAR,GL_LINEAR); }
+    public void filter(int min, int mag) {
+        if (target == GL_TEXTURE_2D_MULTISAMPLE)
+            Logger.info("No texture filter for multisample textures");
+        parameteri(GL_TEXTURE_MIN_FILTER, min);
+        parameteri(GL_TEXTURE_MAG_FILTER, mag);
+    }
 
-    /**
-     * Uploads 1D pixel row data or a sub-region of a 1D texture.
-     * <p>
+    public void wrapRepeat() { wrap(GL_REPEAT); }
+    public void clampToEdge() { wrap(GL_CLAMP_TO_EDGE); }
+    public void clampToBorder() { wrap(GL_CLAMP_TO_BORDER); }
+    public void wrap(int wrap) {
+        switch (target) {
+            case GL_TEXTURE_1D -> parameteri(GL_TEXTURE_WRAP_S, wrap);
+            case GL_TEXTURE_2D, GL_TEXTURE_1D_ARRAY -> {
+                parameteri(GL_TEXTURE_WRAP_S, wrap);
+                parameteri(GL_TEXTURE_WRAP_T, wrap);
+            } case GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY -> {
+                parameteri(GL_TEXTURE_WRAP_S, wrap);
+                parameteri(GL_TEXTURE_WRAP_T, wrap);
+                parameteri(GL_TEXTURE_WRAP_R, wrap);
+            } case GL_TEXTURE_2D_MULTISAMPLE ->
+                    Logger.info("No texture wrap for multisample textures");
+        }
+    }
+
+    /** Uploads 1D pixel row data or a sub-region of a 1D texture.<p>
      * <b>Target Interpretations:</b>
-     * <ul>
-     * <li><b>GL_TEXTURE_1D:</b> xOff represents the horizontal pixel offset. width represents the length of the pixel row.</li>
-     * </ul>
+     * <ul><li><b>GL_TEXTURE_1D:</b> xOff represents the horizontal pixel offset. width represents the length of the pixel row.</li></ul>
      * @param level  the mipmap level to update (0 for base)
      * @param xOff   the x-coordinate pixel offset
      * @param width  the pixel width of the data region
      * @param data   the direct NIO buffer containing the pixel data
-     * * @see <a href="https://docs.gl/gl4/glTexSubImage1D">glTexSubImage1D Reference</a>
-     */
+     * @see <a href="https://docs.gl/gl4/glTexSubImage1D">glTexSubImage1D Reference</a> */
     public void upload1D(int level, int xOff, int width, Buffer data) {
         if (disposed || !allocated) throw new IllegalStateException("Texture is disposed or unallocated");
         glPixelStorei(GL_UNPACK_ALIGNMENT, format.alignment());
         texSubImage1D(level, xOff, width, data);
     }
 
-    /**
-     * Uploads 2D pixel planar data, or a sub-region of a 1D Texture Array.
-     * <p>
+    /** Uploads 2D pixel planar data, or a sub-region of a 1D Texture Array.<p>
      * <b>Target Interpretations:</b>
      * <ul>
      * <li><b>GL_TEXTURE_2D:</b> xOff and yOff represent standard 2D spatial pixel offsets. width and height represent the dimensions of the bounding box.</li>
@@ -178,17 +198,14 @@ public class Texture implements Disposable {
      * @param width  the pixel width of the data region
      * @param height the pixel height of the data region or total layer count
      * @param data   the direct NIO buffer containing the pixel data
-     * * @see <a href="https://docs.gl/gl4/glTexSubImage2D">glTexSubImage2D Reference</a>
-     */
+     * @see <a href="https://docs.gl/gl4/glTexSubImage2D">glTexSubImage2D Reference</a> */
     public void upload2D(int level, int xOff, int yOff, int width, int height, Buffer data) {
         if (disposed || !allocated) throw new IllegalStateException("Texture is disposed or unallocated");
         glPixelStorei(GL_UNPACK_ALIGNMENT, format.alignment());
         texSubImage2D(level, xOff, yOff, width, height, data);
     }
 
-    /**
-     * Uploads 3D pixel volumetric data, or a sub-region of a 2D Texture Array / Cube Map.
-     * <p>
+    /** Uploads 3D pixel volumetric data, or a sub-region of a 2D Texture Array / Cube Map.<p>
      * <b>Target Interpretations:</b>
      * <ul>
      * <li><b>GL_TEXTURE_3D:</b> xOff, yOff, zOff represent spatial coordinates. depth represents voxel depth.</li>
@@ -203,61 +220,26 @@ public class Texture implements Disposable {
      * @param height the pixel height of the data region
      * @param depth  the voxel depth or total layer count of the data region
      * @param data   the direct NIO buffer containing the pixel data
-     * * @see <a href="https://docs.gl/gl4/glTexSubImage3D">glTexSubImage3D Reference</a>
-     */
+     * @see <a href="https://docs.gl/gl4/glTexSubImage3D">glTexSubImage3D Reference</a> */
     public void upload3D(int level, int xOff, int yOff, int zOff, int width, int height, int depth, Buffer data) {
         if (disposed || !allocated) throw new IllegalStateException("Texture is disposed or unallocated");
         glPixelStorei(GL_UNPACK_ALIGNMENT, format.alignment());
         texSubImage3D(level, xOff, yOff, zOff, width, height, depth, data);
     }
 
-    /**
-     * Automatically uploads bulk pixel data to cover the entire base level (Level 0) of the texture.
-     * <p>
+    /** Automatically uploads bulk pixel data to cover the entire base level (Level 0) of the texture.<p>
      * This method automatically queries the texture's structural target type and roots the dimensions
-     * and offsets to cover the entire texture canvas.
-     * <p>
+     * and offsets to cover the entire texture canvas.<p>
      * <b>Warning:</b> This method only targets the base level 0. For multi-layered array textures, the
      * provided buffer must contain the pixel data for <i>all</i> layers contiguous in memory. For updating
      * specific sub-regions or individual layers, use the granular dimensional upload methods instead.
-     * @param data the direct NIO buffer containing the full base-level pixel data
-     */
+     * @param data the direct NIO buffer containing the full base-level pixel data */
     public void upload(Buffer data) {
         switch (target) {
             case GL_TEXTURE_1D -> upload1D(0, 0, width, data);
             case GL_TEXTURE_2D, GL_TEXTURE_1D_ARRAY -> upload2D(0, 0, 0, width, height, data);
             case GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY -> upload3D(0, 0, 0, 0, width, height, depth, data);
             default -> throw new IllegalStateException("Unsupported automatic upload for target: " + target);
-        }
-    }
-
-
-    public void parameteri(int pname, int param) { glTexParameteri(target, pname, param); }
-    public void parameterf(int pname, float param) { glTexParameterf(target, pname, param); }
-    public void filterNearest() { filter(GL_NEAREST,GL_NEAREST); }
-    public void filterLinear() { filter(GL_LINEAR,GL_LINEAR); }
-    public void filter(int min, int mag) {
-        if (target == GL_TEXTURE_2D_MULTISAMPLE) // to future self
-            Logger.info("No texture filter for multisample textures");
-        parameteri(GL_TEXTURE_MIN_FILTER, min);
-        parameteri(GL_TEXTURE_MAG_FILTER, mag);
-    }
-    public void wrapRepeat() { wrap(GL_REPEAT); }
-    public void clampToBorder() { wrap(GL_CLAMP_TO_BORDER); }
-    public void clampToEdge() { wrap(GL_CLAMP_TO_EDGE); }
-    public void wrap(int wrap) {
-        switch (target) {
-            case GL_TEXTURE_1D -> parameteri(GL_TEXTURE_WRAP_S, wrap);
-            case GL_TEXTURE_2D, GL_TEXTURE_1D_ARRAY -> {
-                parameteri(GL_TEXTURE_WRAP_S, wrap);
-                parameteri(GL_TEXTURE_WRAP_T, wrap);
-            } case GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY -> {
-                parameteri(GL_TEXTURE_WRAP_S, wrap);
-                parameteri(GL_TEXTURE_WRAP_T, wrap);
-                parameteri(GL_TEXTURE_WRAP_R, wrap);
-            } case GL_TEXTURE_2D_MULTISAMPLE -> {
-                Logger.info("No texture wrap for multisample textures");
-            }
         }
     }
 
@@ -269,7 +251,7 @@ public class Texture implements Disposable {
             case FloatBuffer b -> glTexSubImage1D(target, level, xOff, w, f, t, b);
             case IntBuffer b   -> glTexSubImage1D(target, level, xOff, w, f, t, b);
             case ShortBuffer b -> glTexSubImage1D(target, level, xOff, w, f, t, b);
-            default -> throw new IllegalArgumentException("Unsupported buffer class: " + data.getClass().getName());
+            default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
         }
     }
 
@@ -281,7 +263,7 @@ public class Texture implements Disposable {
             case FloatBuffer b -> glTexSubImage2D(target, level, xOff, yOff, w, h, f, t, b);
             case IntBuffer b   -> glTexSubImage2D(target, level, xOff, yOff, w, h, f, t, b);
             case ShortBuffer b -> glTexSubImage2D(target, level, xOff, yOff, w, h, f, t, b);
-            default -> throw new IllegalArgumentException("Unsupported buffer class: " + data.getClass().getName());
+            default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
         }
     }
 
@@ -293,10 +275,9 @@ public class Texture implements Disposable {
             case FloatBuffer b -> glTexSubImage3D(target, level, xOff, yOff, zOff, w, h, d, f, t, b);
             case IntBuffer b   -> glTexSubImage3D(target, level, xOff, yOff, zOff, w, h, d, f, t, b);
             case ShortBuffer b -> glTexSubImage3D(target, level, xOff, yOff, zOff, w, h, d, f, t, b);
-            default -> throw new IllegalArgumentException("Unsupported buffer class: " + data.getClass().getName());
+            default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
         }
     }
-
 
 
 
