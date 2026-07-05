@@ -1,6 +1,6 @@
 package io.github.nascentlogic.jgen;
 
-import io.github.nascentlogic.jgen.gfx.Program;
+import io.github.nascentlogic.jgen.gfx.ShaderProgram;
 import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.lwjgl.Version;
@@ -132,7 +132,7 @@ public final class Jgen {
             } catch (Exception e) {
                 Logger.error(e);
             } finally {
-                Program.deleteAllPrograms();
+                ShaderProgram.deleteAllPrograms();
                 Logger.info("CLOSING WINDOW");
                 window.terminate();
             }

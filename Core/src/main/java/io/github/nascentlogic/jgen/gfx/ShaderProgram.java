@@ -21,7 +21,7 @@ import static org.lwjgl.opengl.GL43.*;
 /**
  * F.Dahl, 6/29/2026
  */
-public class Program implements Disposable {
+public class ShaderProgram implements Disposable {
 
     private static final class SamplerManager {
         final Map<String,Integer> map = HashMap.newHashMap(16);
@@ -40,8 +40,8 @@ public class Program implements Disposable {
         }
     }
 
-    private static final Map<String,Program> PROGRAM_MAP = HashMap.newHashMap(64);
-    private static Program CURRENT_PROGRAM = null;
+    private static final Map<String, ShaderProgram> PROGRAM_MAP = HashMap.newHashMap(64);
+    private static ShaderProgram CURRENT_PROGRAM = null;
     private static int INVALID_UNIFORM_LOCATION = -1;
 
     private int handle;
@@ -54,7 +54,7 @@ public class Program implements Disposable {
      * <p>Note: Existing programs with the same name will be replaced (if this installs successfully).</p>
      * @param shader shader to install
      * @throws Exception if missing files, compilation error or linking error. */
-    public Program(Shader shader) throws Exception {
+    public ShaderProgram(Shader shader) throws Exception {
         Objects.requireNonNull(shader);
         name = shader.name();
         final int[] handles = new int[Shader.Type.array.length];
@@ -78,7 +78,7 @@ public class Program implements Disposable {
         } uniformCache = uniformLocationMap(handle);
         invalidUniformSet = HashSet.newHashSet(16);
         samplerManager = new SamplerManager();
-        Program existing = PROGRAM_MAP.put(name,this);
+        ShaderProgram existing = PROGRAM_MAP.put(name,this);
         if (existing != null) {
             existing.free();
             Logger.info("Program replaced: \"{}\"", name);
@@ -107,13 +107,13 @@ public class Program implements Disposable {
         handle = GL_NONE;
     }
 
-    public static Program currentProgram() {
+    public static ShaderProgram currentProgram() {
         return CURRENT_PROGRAM;
     }
 
     /** @return {@code true} if program exist */
     public static boolean useProgram(String name) {
-        Program program = PROGRAM_MAP.get(name);
+        ShaderProgram program = PROGRAM_MAP.get(name);
         if (program == null) return false;
         program.use();
         return true;

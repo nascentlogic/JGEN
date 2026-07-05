@@ -137,12 +137,12 @@ public class Framebuffer implements Disposable {
         glViewport(0,0,width,height);
     }
 
-    public void readBuffer(int slot) {
+    public void readbuffer(int slot) {
         if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for read");
         glReadBuffer(GL_COLOR_ATTACHMENT0 + slot);
     }
 
-    public void drawBuffer(int slot) {
+    public void drawbuffer(int slot) {
         if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for draw");
         glDrawBuffer(GL_COLOR_ATTACHMENT0 + slot);
     }
@@ -174,7 +174,7 @@ public class Framebuffer implements Disposable {
         }
     }
 
-    public void drawBuffers(int... slots) {
+    public void drawbuffers(int... slots) {
         if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for draw");
         if (slots == null || slots.length == 0) return;
         try (MemoryStack stack = MemoryStack.stackPush()) {
