@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import io.github.nascentlogic.jgen.gfx.Bitmap;
+import io.github.nascentlogic.jgen.gfx.Color;
 import org.tinylog.Logger;
 import org.tinylog.configuration.Configuration;
 
@@ -168,6 +169,7 @@ public final class Disk {
         return new GsonBuilder()
                 .setPrettyPrinting()
                 .disableHtmlEscaping()
+                .registerTypeAdapter(Color.class,new Color.Adapter())
                 .create();
     }
 

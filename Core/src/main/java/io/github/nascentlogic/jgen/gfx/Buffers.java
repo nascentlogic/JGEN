@@ -25,53 +25,26 @@ public class Buffers {
     // Buffer Binding
     // =============================================================================
 
-    public static void bindVAO(int vao) {
-        glBindVertexArray(vao);
-    }
-
-    public static void bindVBO(int vbo) {
-        bindBuffer(GL_ARRAY_BUFFER,vbo);
-    }
-
-    public static void bindEBO(int ebo) {
-        bindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
-    }
-
-    public static void bindUBO(int ubo) {
-        bindBuffer(GL_UNIFORM_BUFFER,ubo);
-    }
-
-    public static void bindBuffer(int target, int buffer) {
-        glBindBuffer(target,buffer);
-    }
-
-    public static void bindBufferBase(int target, int index, int buffer) {
-        glBindBufferBase(target, index, buffer);
-    }
-
+    public static void bindVAO(int vao) { glBindVertexArray(vao); }
+    public static void bindVBO(int vbo) { bindBuffer(GL_ARRAY_BUFFER,vbo); }
+    public static void bindEBO(int ebo) { bindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo); }
+    public static void bindUBO(int ubo) { bindBuffer(GL_UNIFORM_BUFFER,ubo); }
+    public static void bindBuffer(int target, int buffer) { glBindBuffer(target,buffer); }
+    public static void bindBufferBase(int target, int index, int buffer) { glBindBufferBase(target, index, buffer); }
 
     // =============================================================================
     // Buffer Generation
     // =============================================================================
 
-    public static int generateVAO() {
-        return glGenVertexArrays();
-    }
-
+    public static int generateVAO() { return glGenVertexArrays(); }
     public static int generateBindVAO() {
         int vao = generateVAO();
         bindVAO(vao);
         return vao;
     }
 
-    public static int generateVBO(int usage, int size) {
-        return generateBuffer(GL_ARRAY_BUFFER,usage,size);
-    }
-
-    public static int generateEBO(int size) {
-        return generateBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_STATIC_DRAW,size);
-    }
-
+    public static int generateVBO(int usage, int size) { return generateBuffer(GL_ARRAY_BUFFER,usage,size); }
+    public static int generateEBO(int size) { return generateBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_STATIC_DRAW,size); }
     public static int generateEBO(byte[] indices) {
         int ebo = glGenBuffers();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
@@ -170,33 +143,13 @@ public class Buffers {
     // Buffer Upload
     // =============================================================================
 
-    public static void uploadVBO(Buffer data) {
-        upload(GL_ARRAY_BUFFER, data);
-    }
-
-    public static void uploadVBO(int offset, Buffer data) {
-        upload(GL_ARRAY_BUFFER, offset, data);
-    }
-
-    public static void uploadEBO(int offset, Buffer data) {
-        upload(GL_ELEMENT_ARRAY_BUFFER, offset, data);
-    }
-
-    public static void uploadEBO(Buffer data) {
-        upload(GL_ELEMENT_ARRAY_BUFFER, data);
-    }
-
-    public static void uploadUBO(Buffer data) {
-        upload(GL_UNIFORM_BUFFER, data);
-    }
-
-    public static void uploadUBO(int offset, Buffer data) {
-        upload(GL_UNIFORM_BUFFER, offset, data);
-    }
-
-    public static void upload(int target, Buffer data) {
-        upload(target,0,data);
-    }
+    public static void uploadVBO(Buffer data) { upload(GL_ARRAY_BUFFER, data); }
+    public static void uploadVBO(int offset, Buffer data) { upload(GL_ARRAY_BUFFER, offset, data); }
+    public static void uploadEBO(int offset, Buffer data) { upload(GL_ELEMENT_ARRAY_BUFFER, offset, data); }
+    public static void uploadEBO(Buffer data) { upload(GL_ELEMENT_ARRAY_BUFFER, data); }
+    public static void uploadUBO(Buffer data) { upload(GL_UNIFORM_BUFFER, data); }
+    public static void uploadUBO(int offset, Buffer data) { upload(GL_UNIFORM_BUFFER, offset, data); }
+    public static void upload(int target, Buffer data) { upload(target,0,data); }
 
     /**
      * Upload data to the bound target buffer.
@@ -223,19 +176,10 @@ public class Buffers {
     // Buffer Delete
     // =============================================================================
 
-
     /** NOTE: Reccomend deleting the VAO before VBOs and EBO */
-    public static void deleteVAO(int vao) {
-        glDeleteVertexArrays(vao);
-    }
-
-    public static void deleteBuffer(int buffer) {
-        glDeleteBuffers(buffer);
-    }
-
-    public static void deleteBuffers(int... buffers) {
-        glDeleteBuffers(buffers);
-    }
+    public static void deleteVAO(int vao) { glDeleteVertexArrays(vao); }
+    public static void deleteBuffer(int buffer) { glDeleteBuffers(buffer); }
+    public static void deleteBuffers(int... buffers) { glDeleteBuffers(buffers); }
 
     // =============================================================================
     // CPU - Copy / Transfer

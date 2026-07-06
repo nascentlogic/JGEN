@@ -1,6 +1,8 @@
 package org.example;
 
 import io.github.nascentlogic.jgen.*;
+import io.github.nascentlogic.jgen.gfx.Color;
+import io.github.nascentlogic.jgen.io.Disk;
 import org.joml.Vector2i;
 import org.joml.Vector4i;
 import org.joml.primitives.Rectanglef;
@@ -29,6 +31,15 @@ public class TestGame implements Game {
 
     public void start() throws Exception {
 
+        Color color = new Color(0.5f,0.25f,0.75f,1.0f);
+        Disk.userWriteJson(color,"color.json"); // Drops down to 8-bit precision matching disk
+
+        Color color2 = Disk.userLoadJson(Color.class,"color.json");
+        Disk.userWriteJson(color2,"color.json"); // Rewrites identical 8-bit precision data
+
+        Color color3 = Disk.userLoadJson(Color.class,"color.json");
+        boolean equals = color2.equals(color3);
+        int i = 0;
         // long time = Jgen.get().time().runTimeNS();
         // TextureAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
         // time = Jgen.get().time().runTimeNS() - time;
