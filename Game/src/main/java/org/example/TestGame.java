@@ -31,15 +31,16 @@ public class TestGame implements Game {
 
     public void start() throws Exception {
 
-        Color color = new Color(0.5f,0.25f,0.75f,1.0f);
-        Disk.userWriteJson(color,"color.json"); // Drops down to 8-bit precision matching disk
 
-        Color color2 = Disk.userLoadJson(Color.class,"color.json");
-        Disk.userWriteJson(color2,"color.json"); // Rewrites identical 8-bit precision data
+        Palette palette1 = Disk.userLoadJson(Palette.class,"palette.json");
+        Disk.userWriteJson(palette1,"palette.json");
+        Palette palette2 = Disk.userLoadJson(Palette.class,"palette.json");
+        for (Color color : palette2.colors) System.out.println(color);
 
-        Color color3 = Disk.userLoadJson(Color.class,"color.json");
-        boolean equals = color2.equals(color3);
         int i = 0;
+
+
+
         // long time = Jgen.get().time().runTimeNS();
         // TextureAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
         // time = Jgen.get().time().runTimeNS() - time;

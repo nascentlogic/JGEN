@@ -18,6 +18,23 @@ public class Color {
 
     public static float GAMMA = 2.2f;
     public static float GAMMA_INV = 1f / GAMMA;
+    // =============================================================================
+    // Common Constants
+    // =============================================================================
+    public static final Color CLEAR       = new Color(0f, 0f, 0f, 0f);
+    public static final Color BLACK       = new Color(0f, 0f, 0f, 1f);
+    public static final Color WHITE       = new Color(1f, 1f, 1f, 1f);
+    // Primaries & Secondaries
+    public static final Color RED         = new Color(1f, 0f, 0f, 1f);
+    public static final Color GREEN       = new Color(0f, 1f, 0f, 1f);
+    public static final Color BLUE        = new Color(0f, 0f, 1f, 1f);
+    public static final Color YELLOW      = new Color(1f, 1f, 0f, 1f);
+    public static final Color CYAN        = new Color(0f, 1f, 1f, 1f);
+    public static final Color MAGENTA     = new Color(1f, 0f, 1f, 1f);
+    // Perceptual Grayscale (Derived via x^2.2 to perfectly match sRGB benchmarks)
+    public static final Color LIGHT_GRAY  = new Color(0.53328f, 0.53328f, 0.53328f, 1f); // ~0.75 sRGB
+    public static final Color GRAY        = new Color(0.21406f, 0.21406f, 0.21406f, 1f); // ~0.50 sRGB
+    public static final Color DARK_GRAY   = new Color(0.04519f, 0.04519f, 0.04519f, 1f); // ~0.25 sRGB
 
     private float r, g, b, a;       // linear
     transient private float p;      // packed
@@ -26,6 +43,7 @@ public class Color {
     public Color() { set(1,1,1,1); }
     public Color(int intBits) { setIntBits(intBits); }
     public Color(Color color) { set(color); }
+    public Color(String hex) { setHex(hex); }
     public Color(float r, float g, float b, float a) { set(r, g, b, a); }
 
     public Color set(Color color) { return set(color.r,color.g,color.b,color.a); }
@@ -58,10 +76,98 @@ public class Color {
         return setIntBits(i);
     }
 
+    /**
+     * Sets this color from a sRGB Hex code string (e.g., "#FF0000")
+     */
+    public Color setHex(String hex) {
+        return fromHex(hex,this);
+    }
+
+    /**
+     * Sets this color from a raw Linear Hex code string without gamma alteration.
+     */
+    public Color setHexLinear(String hex) {
+        return fromHexLinear(hex, this);
+    }
+
+    /**
+     * Sets this color's channels using values from a JOML Vector4f (assumed Linear).
+     */
+    public Color setVec4(Vector4f vec) {
+        return set(vec.x, vec.y, vec.z, vec.w);
+    }
+
+    /**
+     * Sets this color from an RGBA float array at the specified offset.
+     */
+    public Color setArray(float[] src, int offset) {
+        return set(src[offset], src[offset + 1], src[offset + 2], src[offset + 3]);
+    }
+
+    public Color add(Color other) { return add(this, other, this); }
+    public Color sub(Color other) { return sub(this, other, this); }
+    public Color mul(Color other) { return mul(this, other, this); }
+    public Color div(Color other) { return div(this, other, this); }
+
+    public Color add(float r, float g, float b, float a) { return add(this, r, g, b, a, this); }
+    public Color sub(float r, float g, float b, float a) { return sub(this, r, g, b, a, this); }
+    public Color mul(float r, float g, float b, float a) { return mul(this, r, g, b, a, this); }
+    public Color div(float r, float g, float b, float a) { return div(this, r, g, b, a, this); }
+
+    public Color scale(float scalar) { return scale(this,scalar,this); }
+    public Color scaleRgb(float scalar) { return scaleRgb(this,scalar,this); }
+
+    public Color blend(Color other) {
+        return blend(this,other,this);
+    }
+
+    /**
+     * Linearly interpolates this color instance toward a target state.
+     */
+    public Color lerp(Color target, float t) {
+        return lerpLinear(this, target, t, this);
+    }
+
+    /**
+     * Inverts all components
+     */
+    public Color invert() {
+        return set(1f - r, 1f - g, 1f - b, 1f - a);
+    }
+
+    /**
+     * Inverts the RGB components while preserving the alpha channel.
+     */
+    public Color invertRgb() {
+        return set(1f - r, 1f - g, 1f - b, a);
+    }
+
+    /**
+     * Premultiplies the color components by the alpha channel.
+     * Note: This keeps the alpha channel exactly as it is for the GPU blending track.
+     */
+    public Color premultiplyAlpha() {
+        return set(r * a, g * a, b * a, a);
+    }
+
+    /**
+     * Reverses a premultiplied alpha conversion, returning the color components back to Straight space.
+     * If the alpha is completely transparent (0.0), the color channels are safely reset to 0.0 to prevent NaN errors.
+     */
+    public Color straightAlpha() {
+        if (a <= 0f) return set(0f, 0f, 0f, 0f);
+        return set(r / a, g / a, b / a, a);
+    }
+
     public float r() { return r; }
     public float g() { return g; }
     public float b() { return b; }
     public float a() { return a; }
+
+    public float sR() { return (float) Math.pow(r, GAMMA_INV); }
+    public float sG() { return (float) Math.pow(g, GAMMA_INV); }
+    public float sB() { return (float) Math.pow(b, GAMMA_INV); }
+    public float sA() { return a; }
 
     public float packedFormat() {
         if (d) { int i = intBits();
@@ -78,20 +184,25 @@ public class Color {
         return rBits | (gBits << 8) | (bBits << 16) | (aBits << 24);
     }
 
-    public Color srgbToLinear() {
-        this.r = (float) Math.pow(r, GAMMA);
-        this.g = (float) Math.pow(g, GAMMA);
-        this.b = (float) Math.pow(b, GAMMA);
-        this.d = true;
-        return this;
+    /** Exposes the internal linear values directly into a provided destination vector. */
+    public Vector4f toVec4Rgba(Vector4f dst) {
+        return dst.set(r, g, b, a);
     }
 
-    public Color linearToSrgb() {
-        this.r = (float) Math.pow(r, GAMMA_INV);
-        this.g = (float) Math.pow(g, GAMMA_INV);
-        this.b = (float) Math.pow(b, GAMMA_INV);
-        this.d = true;
-        return this;
+    public Vector4f toVec4Srgba(Vector4f dst) {
+        dst.x = (float) Math.pow(r, GAMMA_INV);
+        dst.y = (float) Math.pow(g, GAMMA_INV);
+        dst.z = (float) Math.pow(b, GAMMA_INV);
+        dst.w = a;
+        return dst;
+    }
+
+    /** Writes this Color into a float array at the specified offset in RGBA order. */
+    public void toArrayRgba(float[] dst, int offset) {
+        dst[offset]     = r;
+        dst[offset + 1] = g;
+        dst[offset + 2] = b;
+        dst[offset + 3] = a;
     }
 
     /**
@@ -106,7 +217,7 @@ public class Color {
      * </ul>
      * @return The dst vector populated with HSV+A data.
      */
-    public Vector4f toHSVA(Vector4f dst) {
+    public Vector4f toVec4HSV(Vector4f dst) {
         float sR = (float) Math.pow(r, Color.GAMMA_INV);
         float sG = (float) Math.pow(g, Color.GAMMA_INV);
         float sB = (float) Math.pow(b, Color.GAMMA_INV);
@@ -124,10 +235,48 @@ public class Color {
         } return dst.set(h,s,max,a);
     }
 
+    /**
+     * Calculates the perceptual luminance (brightness) of this linear color.
+     * Useful for checking contrast ratios or applying grayscale effects.
+     * @return A value between 0.0 (perceptually black) and 1.0 (perceptually bright white).
+     */
+    public float luminance() {
+        // Exact linear coefficients from ITU-R BT.709
+        return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    }
+
     @Override
     public String toString() {
         int bits = intBits();
-        return "[" + (bits & 0xFF) + "," + ((bits >> 8) & 0xFF) + "," + ((bits >> 16) & 0xFF) + "," + ((bits >> 24) & 0xFF) + "]";
+        return String.format("[%3d,%3d,%3d,%3d]",
+                (bits & 0xFF),
+                ((bits >> 8) & 0xFF),
+                ((bits >> 16) & 0xFF),
+                ((bits >> 24) & 0xFF)
+        );
+    }
+
+    /**
+     * Converts the color into an sRGB Hex string representation format.
+     */
+    public String toHexString() {
+        int rBits = (int) (sR() * 255f) & 0xFF;
+        int gBits = (int) (sG() * 255f) & 0xFF;
+        int bBits = (int) (sB() * 255f) & 0xFF;
+        int aBits = (int) (sA() * 255f) & 0xFF;
+        return String.format("#%02X%02X%02X%02X", rBits, gBits, bBits, aBits);
+    }
+
+    /**
+     * Converts this color into a raw, un-de-gamma'd Linear Hex string format (#RRGGBBAA).
+     * Useful for direct debugging or logging exact component memory states.
+     */
+    public String toHexStringLinear() {
+        int rBits = (int) (r * 255f) & 0xFF;
+        int gBits = (int) (g * 255f) & 0xFF;
+        int bBits = (int) (b * 255f) & 0xFF;
+        int aBits = (int) (a * 255f) & 0xFF;
+        return String.format("#%02X%02X%02X%02X", rBits, gBits, bBits, aBits);
     }
 
     @Override
@@ -137,18 +286,73 @@ public class Color {
         return this.intBits() == other.intBits();
     }
 
-    public boolean equalsPrecise(Color other) {
-        if (other == null) return false;
-        if (this == other) return true;
-        return  this.r == other.r &&
-                this.g == other.g &&
-                this.b == other.b &&
-                this.a == other.a;
-    }
-
     @Override
     public int hashCode() {
         return this.intBits();
+    }
+
+    public static Vector4f srgbToLinear(Vector4f srgb, Vector4f dst) {
+        dst.x = (float) Math.pow(Math.clamp(srgb.x,0f,1f), GAMMA);
+        dst.y = (float) Math.pow(Math.clamp(srgb.y,0f,1f), GAMMA);
+        dst.z = (float) Math.pow(Math.clamp(srgb.z,0f,1f), GAMMA);
+        dst.w = Math.clamp(srgb.w,0f,1f);
+        return dst;
+    }
+
+    public static Vector4f linearToSrgb(Vector4f linear, Vector4f dst) {
+        dst.x = (float) Math.pow(Math.clamp(linear.x,0f,1f), GAMMA_INV);
+        dst.y = (float) Math.pow(Math.clamp(linear.y,0f,1f), GAMMA_INV);
+        dst.z = (float) Math.pow(Math.clamp(linear.z,0f,1f), GAMMA_INV);
+        dst.w = Math.clamp(linear.w,0f,1f);
+        return dst;
+    }
+
+    public static Color add(Color src, Color other, Color dst) {
+        return dst.set(src.r + other.r, src.g + other.g, src.b + other.b, src.a + other.a);
+    }
+
+    public static Color sub(Color src, Color other, Color dst) {
+        return dst.set(src.r - other.r, src.g - other.g, src.b - other.b, src.a - other.a);
+    }
+
+    public static Color mul(Color src, Color other, Color dst) {
+        return dst.set(src.r * other.r, src.g * other.g, src.b * other.b, src.a * other.a);
+    }
+
+    public static Color div(Color src, Color other, Color dst) {
+        float r = other.r == 0f ? 0f : src.r / other.r;
+        float g = other.g == 0f ? 0f : src.g / other.g;
+        float b = other.b == 0f ? 0f : src.b / other.b;
+        float a = other.a == 0f ? 0f : src.a / other.a;
+        return dst.set(r, g, b, a);
+    }
+
+    public static Color add(Color src, float r, float g, float b, float a, Color dst) {
+        return dst.set(src.r + r, src.g + g, src.b + b, src.a + a);
+    }
+
+    public static Color sub(Color src, float r, float g, float b, float a, Color dst) {
+        return dst.set(src.r - r, src.g - g, src.b - b, src.a - a);
+    }
+
+    public static Color mul(Color src, float r, float g, float b, float a, Color dst) {
+        return dst.set(src.r * r, src.g * g, src.b * b, src.a * a);
+    }
+
+    public static Color div(Color src, float r, float g, float b, float a, Color dst) {
+        float outR = r == 0f ? 0f : src.r / r;
+        float outG = g == 0f ? 0f : src.g / g;
+        float outB = b == 0f ? 0f : src.b / b;
+        float outA = a == 0f ? 0f : src.a / a;
+        return dst.set(outR, outG, outB, outA);
+    }
+
+    public static Color scaleRgb(Color src, float scalar, Color dst) {
+        return dst.set(src.r * scalar, src.g * scalar, src.b * scalar, src.a);
+    }
+
+    public static Color scale(Color src, float scalar, Color dst) {
+        return dst.set(src.r * scalar, src.g * scalar, src.b * scalar, src.a * scalar);
     }
 
     public static Color lerpLinear(Color start, Color target, float t, Color dst) {
@@ -218,6 +422,50 @@ public class Color {
         return dst.set(r, g, b, alpha);
     }
 
+    /**
+     * Parses a standard sRGB Hex code string (e.g., "#FF0000") into a Linear Color object.
+     * Safely catches format errors and falls back to White if the string is corrupted.
+     */
+    public static Color fromHex(String hex, Color dst) {
+        if (hex == null || hex.isEmpty()) return dst.set(1f, 1f, 1f, 1f);
+        int start = hex.charAt(0) == '#' ? 1 : 0;
+        int length = hex.length() - start;
+        if (length != 6 && length != 8) return dst.set(1f, 1f, 1f, 1f);
+        try {
+            int rBits = Integer.parseInt(hex.substring(start, start + 2), 16);
+            int gBits = Integer.parseInt(hex.substring(start + 2, start + 4), 16);
+            int bBits = Integer.parseInt(hex.substring(start + 4, start + 6), 16);
+            int aBits = (length == 8) ? Integer.parseInt(hex.substring(start + 6, start + 8), 16) : 255;
+            return dst.set(
+                    (float) Math.pow(rBits / 255f, GAMMA),
+                    (float) Math.pow(gBits / 255f, GAMMA),
+                    (float) Math.pow(bBits / 255f, GAMMA),
+                    aBits / 255f);
+        } catch (NumberFormatException e) {
+            return dst.set(1f, 1f, 1f, 1f);
+        }
+    }
+
+    /**
+     * Parses a raw Linear Hex code string directly into a Color object without gamma alteration.
+     * Safely catches format errors and falls back to White if the string is corrupted.
+     */
+    public static Color fromHexLinear(String hex, Color dst) {
+        if (hex == null || hex.isEmpty()) return dst.set(1f, 1f, 1f, 1f);
+        int start = hex.charAt(0) == '#' ? 1 : 0;
+        int length = hex.length() - start;
+        if (length != 6 && length != 8) return dst.set(1f, 1f, 1f, 1f);
+        try {
+            int rBits = Integer.parseInt(hex.substring(start, start + 2), 16);
+            int gBits = Integer.parseInt(hex.substring(start + 2, start + 4), 16);
+            int bBits = Integer.parseInt(hex.substring(start + 4, start + 6), 16);
+            int aBits = (length == 8) ? Integer.parseInt(hex.substring(start + 6, start + 8), 16) : 255;
+            return dst.set(rBits / 255f, gBits / 255f, bBits / 255f, aBits / 255f);
+        } catch (NumberFormatException e) {
+            return dst.set(1f, 1f, 1f, 1f);
+        }
+    }
+
     // =============================================================================
     // Serialization Adapter
     // =============================================================================
@@ -259,11 +507,11 @@ public class Color {
                 int gBits = parseHexPair(value, start + 2);
                 int bBits = parseHexPair(value, start + 4);
                 int aBits = (length == 8) ? parseHexPair(value, start + 6) : 255;
-                float r = rBits / 255f;
-                float g = gBits / 255f;
-                float b = bBits / 255f;
+                float r = (float) Math.pow(rBits / 255f, GAMMA);
+                float g = (float) Math.pow(gBits / 255f, GAMMA);
+                float b = (float) Math.pow(bBits / 255f, GAMMA);
                 float a = aBits / 255f;
-                return new Color(r,g,b,a).srgbToLinear();
+                return new Color(r,g,b,a);
             } catch (Exception e) { return new Color(); }
         }
 
@@ -274,4 +522,208 @@ public class Color {
             return (h1 << 4) | h2;
         }
     }
+
+    // =============================================================================
+    // CPU OpenGL color blending
+    // Not optimized for performance
+    // =============================================================================
+
+    /**
+     * Blends a source color over a destination color using standard alpha compositing.
+     * This handles translucent-over-translucent blending perfectly without color distortion.
+     *
+     * @param src The foreground color being painted.
+     * @param dst The background color underneath.
+     * @param out The target Color object to store the result.
+     * @return The 'out' color reference populated with the correctly blended state.
+     */
+    public static Color blend(Color src, Color dst, Color out) {
+        // 1. Calculate the mathematically correct final alpha channel first
+        float outA = src.a() + dst.a() * (1f - src.a());
+        // Edge case: If both colors are completely invisible, return a clear color to avoid divide-by-zero
+        if (outA <= 0f) return out.set(0f, 0f, 0f, 0f);
+        // 2. Mix the color channels accounting for the destination's alpha weight,
+        // and divide by the final alpha to bring the result back into Straight Space.
+        float r = (src.r() * src.a() + dst.r() * dst.a() * (1f - src.a())) / outA;
+        float g = (src.g() * src.a() + dst.g() * dst.a() * (1f - src.a())) / outA;
+        float b = (src.b() * src.a() + dst.b() * dst.a() * (1f - src.a())) / outA;
+        return out.set(r, g, b, outA);
+    }
+
+    /**
+     * High-level method to blend two full Color objects using separate RGB and Alpha configurations.
+     * This perfectly simulates glBlendFuncSeparate and glBlendEquationSeparate.
+     *
+     * @param src              The incoming source color.
+     * @param srcRGBFactor     The blend factor used to scale the source RGB components.
+     * @param srcAlphaFactor   The blend factor used to scale the source Alpha component.
+     * @param dst              The current background destination color.
+     * @param dstRGBFactor     The blend factor used to scale the destination RGB components.
+     * @param dstAlphaFactor   The blend factor used to scale the destination Alpha component.
+     * @param rgbEquation      The blend equation used to combine the weighted RGB channels.
+     * @param alphaEquation    The blend equation used to combine the weighted Alpha channels.
+     * @param out              The target Color object that will store the clamped results.
+     * @return The 'out' color reference populated with the final blended state.
+     */
+    public static Color blendSeparate(Color src, BlendFactor srcRGBFactor, BlendFactor srcAlphaFactor,
+                                      Color dst, BlendFactor dstRGBFactor, BlendFactor dstAlphaFactor,
+                                      BlendEquation rgbEquation, BlendEquation alphaEquation, Color out) {
+        // 1. Calculate color channels via the primitive method
+        float r = blendChannel(src.r, src.a, srcRGBFactor, dst.r, dst.a, dstRGBFactor, rgbEquation);
+        float g = blendChannel(src.g, src.a, srcRGBFactor, dst.g, dst.a, dstRGBFactor, rgbEquation);
+        float b = blendChannel(src.b, src.a, srcRGBFactor, dst.b, dst.a, dstRGBFactor, rgbEquation);
+        // 2. Calculate the alpha track via the separate primitive method
+        float a = blendAlpha(src.a(), srcAlphaFactor, dst.a(), dstAlphaFactor, alphaEquation);
+        // 3. Delegate to your container (which manages its own bounds clamping)
+        return out.set(r, g, b, a);
+    }
+
+    /**
+     * High-level method to blend two full Color objects using uniform blend states across all channels.
+     * This perfectly simulates glBlendFunc and glBlendEquation.
+     * @param src       The incoming source color.
+     * @param srcFactor The uniform blend factor applied to both source RGB and Alpha tracks.
+     * @param dst       The current background destination color.
+     * @param dstFactor The uniform blend factor applied to both destination RGB and Alpha tracks.
+     * @param equation  The uniform blend equation used to combine all components.
+     * @param out       The target Color object that will store the clamped results.
+     * @return The 'out' color reference populated with the final blended state.
+     */
+    public static Color blend(Color src, BlendFactor srcFactor,
+                              Color dst, BlendFactor dstFactor,
+                              BlendEquation equation, Color out) {
+        // Forward directly to the separate track handler by mirroring the uniform parameters
+        return blendSeparate(src, srcFactor, srcFactor, dst, dstFactor, dstFactor, equation, equation, out);
+    }
+
+    /**
+     * Blends a single color channel component (Red, Green, or Blue) using raw primitive values.
+     * This simulates a single color pipeline track before final fragment buffer clamping.
+     *
+     * @param srcVal    The raw source color channel intensity (e.g., source Red).
+     * @param srcAlpha  The alpha channel intensity of the source color.
+     * @param srcFactor The blend factor setting used to scale the source component.
+     * @param dstVal    The raw destination background color channel intensity (e.g., destination Red).
+     * @param dstAlpha  The alpha channel intensity of the destination background color.
+     * @param dstFactor The blend factor setting used to scale the destination component.
+     * @param equation  The mathematical blending equation used to combine the two weighted parts.
+     * @return The blended, unclamped linear result for this channel.
+     */
+    public static float blendChannel(float srcVal, float srcAlpha, BlendFactor srcFactor,
+                                     float dstVal, float dstAlpha, BlendFactor dstFactor,
+                                     BlendEquation equation) {
+        // Use our new enum functional methods directly to determine the weights
+        float srcWeight = srcFactor.colorBlend(srcVal, srcAlpha, dstVal, dstAlpha);
+        float dstWeight = dstFactor.colorBlend(srcVal, srcAlpha, dstVal, dstAlpha);
+        // Compute the final scaled parts and combine them using the equation lambda
+        return equation.combine(srcVal * srcWeight, dstVal * dstWeight);
+    }
+
+    /**
+     * Blends the Alpha channel component using raw primitive values.
+     * This simulates the isolated alpha blending track before final fragment buffer clamping.
+     *
+     * @param srcAlpha  The alpha channel intensity of the source color.
+     * @param srcFactor The blend factor setting used to scale the source alpha.
+     * @param dstAlpha  The alpha channel intensity of the destination background color.
+     * @param dstFactor The blend factor setting used to scale the destination alpha.
+     * @param equation  The mathematical blending equation used to combine the two weighted parts.
+     * @return The blended, unclamped linear result for the alpha channel.
+     */
+    public static float blendAlpha(float srcAlpha, BlendFactor srcFactor,
+                                   float dstAlpha, BlendFactor dstFactor,
+                                   BlendEquation equation) {
+        // Evaluate the alpha track weights using the separate alpha formulas
+        float srcWeight = srcFactor.alphaBlend(srcAlpha, dstAlpha);
+        float dstWeight = dstFactor.alphaBlend(srcAlpha, dstAlpha);
+        // Compute the final scaled alpha components and combine them
+        return equation.combine(srcAlpha * srcWeight, dstAlpha * dstWeight);
+    }
+
+    public enum BlendFactor {
+        ZERO(
+                (src, sA, dst, dA) -> 0f,
+                (sA, dA) -> 0f
+        ), ONE(
+                (src, sA, dst, dA) -> 1f,
+                (sA, dA) -> 1f
+        ), SRC_COLOR(
+                (src, sA, dst, dA) -> src,
+                (sA, dA) -> sA
+        ), ONE_MINUS_SRC_COLOR(
+                (src, sA, dst, dA) -> 1f - src,
+                (sA, dA) -> 1f - sA
+        ), DST_COLOR(
+                (src, sA, dst, dA) -> dst,
+                (sA, dA) -> dA
+        ), ONE_MINUS_DST_COLOR(
+                (src, sA, dst, dA) -> 1f - dst,
+                (sA, dA) -> 1f - dA
+        ), SRC_ALPHA(
+                (src, sA, dst, dA) -> sA,
+                (sA, dA) -> sA
+        ), ONE_MINUS_SRC_ALPHA(
+                (src, sA, dst, dA) -> 1f - sA,
+                (sA, dA) -> 1f - sA
+        ), DST_ALPHA(
+                (src, sA, dst, dA) -> dA,
+                (sA, dA) -> dA
+        ), ONE_MINUS_DST_ALPHA(
+                (src, sA, dst, dA) -> 1f - dA,
+                (sA, dA) -> 1f - dA
+        );
+
+        private final ColorFormula colorFormula;
+        private final AlphaFormula alphaFormula;
+
+        BlendFactor(ColorFormula colorFormula, AlphaFormula alphaFormula) {
+            this.colorFormula = colorFormula;
+            this.alphaFormula = alphaFormula;
+        }
+
+        /** Computes the weight modifier for a color channel (Red, Green, or Blue). */
+        public float colorBlend(float src, float sA, float dst, float dA) {
+            return colorFormula.compute(src, sA, dst, dA);
+        }
+
+        /** Computes the weight modifier for the Alpha channel. */
+        public float alphaBlend(float sA, float dA) {
+            return alphaFormula.compute(sA, dA);
+        }
+
+        @FunctionalInterface
+        public interface ColorFormula {
+            float compute(float src, float sA, float dst, float dA);
+        }
+
+        @FunctionalInterface
+        public interface AlphaFormula {
+            float compute(float sA, float dA);
+        }
+    }
+
+    public enum BlendEquation {
+        ADD(Float::sum),
+        SUBTRACT((srcPart, dstPart) -> srcPart - dstPart),
+        REVERSE_SUBTRACT((srcPart, dstPart) -> dstPart - srcPart),
+        MIN(Math::min),
+        MAX(Math::max);
+
+        private final EquationFormula formula;
+
+        BlendEquation(EquationFormula formula) { this.formula = formula; }
+
+        /** Combines the weighted source and destination channel components. */
+        public float combine(float srcPart, float dstPart) {
+            return formula.compute(srcPart, dstPart);
+        }
+        @FunctionalInterface
+        public interface EquationFormula {
+            float compute(float srcPart, float dstPart);
+        }
+    }
+
+
+
+
 }
