@@ -33,24 +33,18 @@ public class TextureRegion {
         this.y += y;
     }
 
-    public Vector4f uvCoords(int textureW, int textureH, boolean pixelCentered) {
-        return uvCoords(textureW,textureH,pixelCentered,new Vector4f());
+    public Vector4f uvCoords(int textureW, int textureH) {
+        return uvCoords(textureW,textureH,new Vector4f());
     }
 
-    public Vector4f uvCoords(int textureW, int textureH, boolean pixelCentered, Vector4f dst) {
+    public Vector4f uvCoords(int textureW, int textureH, Vector4f dst) {
         float tw = Math.max(1,textureW);
         float th = Math.max(1,textureH);
-        if (pixelCentered) {
-            dst.x = (x + 0.5f) / tw;       // u
-            dst.y = (y + 0.5f) / th;       // v  (Top Edge of File)
-            dst.z = (x + w - 0.5f) / tw;   // u2
-            dst.w = (y + h - 0.5f) / th;   // v2 (Bottom Edge of File)
-        } else {
-            dst.x = x / tw;                // u
-            dst.y = y / th;                // v  (Top Edge of File)
-            dst.z = (x + w) / tw;          // u2
-            dst.w = (y + h) / th;          // v2 (Bottom Edge of File)
-        } return dst;
+        dst.x = x / tw;                // u
+        dst.y = y / th;                // v  (Top Edge of File)
+        dst.z = (x + w) / tw;          // u2
+        dst.w = (y + h) / th;          // v2 (Bottom Edge of File)
+        return dst;
     }
 
     public TextureRegion[] subDivide(int textureW, int textureH, int spriteW, int spriteH) {

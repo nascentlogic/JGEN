@@ -23,6 +23,7 @@ import static org.lwjgl.system.MemoryStack.stackPush;
  */
 public class Bitmap implements Disposable {
 
+
     private ByteBuffer pixels;
     private final int width;
     private final int height;
@@ -98,11 +99,20 @@ public class Bitmap implements Disposable {
     public int width() { return width; }
     public int height() { return height; }
 
+    public void setPixel(Color color, int x, int y) {
+        setPixel(color.intBits(), x, y);
+    }
 
     public void setPixel(int value, int x, int y) {
         int p = (y * width + x) * channels;
         for (int c = 0; c < channels; c++)
             pixels.put(p + c,(byte) ((value >> (c * 8)) & 0xFF));
+    }
+
+    public Color getPixel(int x, int y, Color dst) {
+        int bits = getPixel(x, y);
+        if (channels == 3) bits |= (0xFF << 24);
+        return dst.setIntBits(bits);
     }
 
     public int getPixel(int x, int y) {
@@ -182,8 +192,15 @@ public class Bitmap implements Disposable {
         }
     }
 
+    /** @see #toTexture(boolean, boolean) */
     public Texture toTexture() { return toTexture(false); }
+    /** @see #toTexture(boolean, boolean) */
     public Texture toTexture(boolean mipmap) { return toTexture(mipmap,false); }
+    /**
+     * @param mipmap allocate mipmap (does not generate)
+     * @param srgb use SRGB / SRGBA texture format (if the bitmap channels >= 3)
+     * @return Texture with Bitmap pixels uploaded to level 0
+     */
     public Texture toTexture(boolean mipmap, boolean srgb) {
         Texture texture = Texture.generate2D(width,height);
         TextureFormat format = switch(channels) {
@@ -195,7 +212,7 @@ public class Bitmap implements Disposable {
         }; texture.allocate(format,mipmap);
         texture.upload(pixels);
         texture.clampToBorder();
-        texture.filterNearest();
+        texture.filterLinear();
         return texture;
     }
 

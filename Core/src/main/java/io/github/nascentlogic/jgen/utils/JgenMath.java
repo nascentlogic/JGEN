@@ -1,5 +1,7 @@
 package io.github.nascentlogic.jgen.utils;
 
+import org.joml.Matrix4f;
+
 /**
  * F.Dahl, 5/8/2026
  */
@@ -42,5 +44,24 @@ public class JgenMath {
     }
 
 
+    public static float clamp(float value) {
+        return Math.clamp(value, 0f, 1f);
+    }
+
+    /**
+     * Constructs a 2D orthographic screen-space matrix with (0,0) at the bottom-left.
+     * @param width  The width of the screen/framebuffer in pixels.
+     * @param height The height of the screen/framebuffer in pixels.
+     * @param dest   The destination JOML Matrix4f to populate
+     * @return The updated projection matrix.
+     */
+    public static Matrix4f screenSpaceMatrix(float width, float height, Matrix4f dest) {
+        return dest.setOrtho2D(0.0f, width, 0.0f, height);
+    }
+
+    /** @see #screenSpaceMatrix(float, float, Matrix4f) */
+    public static Matrix4f screenSpaceMatrix(float width, float height) {
+        return screenSpaceMatrix(width, height, new Matrix4f());
+    }
 
 }

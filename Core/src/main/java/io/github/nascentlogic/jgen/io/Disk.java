@@ -600,6 +600,68 @@ public final class Disk {
     }
 
 
+    public static List<Shader> gameLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(gameRootDirectory(first,more));
+    }
+
+    public static List<Shader> userLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(userDataDirectory(first,more));
+    }
+
+    /**
+     * Loads a {@link Shader} from resources by its base filename.
+     * The path should point to the resource directory containing the shader files.
+     * @param name  name of the files without extension (e.g., "basic")
+     * @param first first segment of the resource directory path
+     * @param more  optional additional segments of the resource directory path
+     * @return a complete {@link Shader} (containing at least .vert and .frag sources)
+     * @throws IOException if the shader is incomplete or the directory path is invalid
+     */
+    public static Shader resourceShader(String name, String first, String... more) throws IOException {
+        Objects.requireNonNull(name, "Resource shader name is null");
+        if (name.isBlank()) throw new IOException("Resource shader name cannot be blank");
+        String directory = toResourcePath(first, more);
+        Shader.File[] files = new Shader.File[Shader.Type.array.length];
+        for (int i = 0; i < files.length; i++) {
+            Shader.Type type = Shader.Type.array[i];
+            String filePath = directory + "/" + name + type.extension;
+            try { String sourceCode = resourceToString(filePath);
+                files[i] = new Shader.File(type, sourceCode);
+            } catch (IOException ignored) { /* */ }
+        } Shader shader = new Shader(name, files);
+        if (!shader.isComplete()) {
+            throw new IOException("Incomplete shader resource: \"" + name + "\" in " + directory);
+        } return shader;
+    }
+
+    public static List<Shader> loadShaders(Path directoryPath) throws IOException {
+        if (!pathIsDir(Objects.requireNonNull(directoryPath)))
+            throw new IOException("Target path is not a directory: " + directoryPath);
+        Map<String, Shader.File[]> map = new HashMap<>();
+        final Shader.Type[] types = Shader.Type.array;
+        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
+            stream.filter(token -> !token.isDirectory()).forEach(token -> {
+                for (Shader.Type type : types) {
+                    if (token.extension.equals(type.extension)) {
+                        try { String sourceCode = fileToString(Path.of(token.path));
+                            Shader.File[] files = map.computeIfAbsent(token.name, k -> new Shader.File[3]);
+                            files[type.ordinal()] = new Shader.File(type, sourceCode);
+                        } catch (IOException e) { Logger.warn(e); }
+                        break;
+                    }
+                }
+            });
+        } if (map.isEmpty()) return List.of();
+        List<Shader> list = new ArrayList<>(map.size());
+        var entrySet = map.entrySet();
+        for (var entry : entrySet) {
+            Shader shader = new Shader(entry.getKey(), entry.getValue());
+            if (shader.isComplete()) {
+                list.add(shader);
+            } else Logger.warn("Shader: \"{}\", missing file/s",shader.name());
+        } return list;
+    }
+
 
 
 
@@ -1311,43 +1373,12 @@ public final class Disk {
     }
 
 
-    public static List<Shader> gameLoadShaders(String first, String... more) throws IOException {
-        return loadShaders(gameRootDirectory(first,more));
-    }
+    // =============================================================================
+    // Texture Atlas
+    // =============================================================================
 
-    public static List<Shader> userLoadShaders(String first, String... more) throws IOException {
-        return loadShaders(userDataDirectory(first,more));
-    }
 
-    public static List<Shader> loadShaders(Path directoryPath) throws IOException {
-        if (!pathIsDir(Objects.requireNonNull(directoryPath)))
-            throw new IOException("Target path is not a directory: " + directoryPath);
-        Map<String, Shader.File[]> map = new HashMap<>();
-        final Shader.Type[] types = Shader.Type.array;
-        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
-            stream.filter(token -> !token.isDirectory()).forEach(token -> {
-                for (Shader.Type type : types) {
-                    if (token.extension.equals(type.extension)) {
-                        try { String sourceCode = fileToString(Path.of(token.path));
-                            Shader.File[] files = map.computeIfAbsent(token.name, k -> new Shader.File[3]);
-                            files[type.ordinal()] = new Shader.File(type, sourceCode);
-                        } catch (IOException e) { Logger.warn(e); }
-                        break;
-                    }
-                }
-            });
-        } if (map.isEmpty()) return List.of();
-        List<Shader> list = new ArrayList<>(map.size());
-        var entrySet = map.entrySet();
-        for (var entry : entrySet) {
-            Shader shader = new Shader(entry.getKey(), entry.getValue());
-            if (shader.isComplete()) {
-                list.add(shader);
-            } else Logger.warn("Shader: \"{}\", missing file/s",shader.name());
-        } return list;
-    }
-
-    public static TextureAtlas gameLoadAtlas(String name, String first, String... more) throws IOException {
+    public static BitmapAtlas gameLoadAtlas(String name, String first, String... more) throws IOException {
         Objects.requireNonNull(name);
         if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
         Path relativePath = toPath(first,more).normalize();
@@ -1360,7 +1391,7 @@ public final class Disk {
             throw new IOException("Unable to locate atlas: \"" + imagesPath + "\".");
         }
 
-        final String atlasFileName = name + TextureAtlas.FILE_SUFFIX;
+        final String atlasFileName = name + BitmapAtlas.FILE_SUFFIX;
         final FileToken[] cachedTokens = new FileToken[2];
 
 
@@ -1390,12 +1421,12 @@ public final class Disk {
                 fileSystemDelete(cachePathPng);
             }
             else try {
-                TextureAtlas textureAtlas = loadJson(TextureAtlas.class,cachePathJson);
-                if (textureAtlas != null && !textureAtlas.isOutdated(modifiedHash[0])) {
+                BitmapAtlas bitmapAtlas = loadJson(BitmapAtlas.class,cachePathJson);
+                if (bitmapAtlas != null && !bitmapAtlas.isOutdated(modifiedHash[0])) {
                     Bitmap atlasBitmap = new Bitmap(load(cachePathPng,true));
-                    textureAtlas.setBitmap(atlasBitmap);
-                    textureAtlas.rebuildLookupMap();
-                    return textureAtlas;
+                    bitmapAtlas.setBitmap(atlasBitmap);
+                    bitmapAtlas.rebuildLookupMap();
+                    return bitmapAtlas;
                 }
             } catch (IOException e) { Logger.warn(e);}
         }
@@ -1414,7 +1445,7 @@ public final class Disk {
         }
 
         Logger.debug("Packing atlas \"{}\", ({} files)",name,bitmaps.size());
-        TextureAtlas atlas = new TextureAtlas(name,bitmaps,names,modifiedHash[0]);
+        BitmapAtlas atlas = new BitmapAtlas(name,bitmaps,names,modifiedHash[0]);
         for (Bitmap image : bitmaps) image.free();
 
         Path atlasJsonPath = cachePath.resolve(atlasFileName + ".json");

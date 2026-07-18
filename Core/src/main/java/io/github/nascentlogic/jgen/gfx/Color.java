@@ -8,6 +8,8 @@ import org.joml.Vector4f;
 
 import java.io.IOException;
 
+import static io.github.nascentlogic.jgen.utils.JgenMath.clamp;
+
 /**
  * Linear Space RGBA Color.
  * <p><strong>Note:</strong> GSON serialized to sRGBA format hex string.
@@ -18,45 +20,40 @@ public class Color {
 
     public static float GAMMA = 2.2f;
     public static float GAMMA_INV = 1f / GAMMA;
-    // =============================================================================
-    // Common Constants
-    // =============================================================================
     public static final Color CLEAR       = new Color(0f, 0f, 0f, 0f);
     public static final Color BLACK       = new Color(0f, 0f, 0f, 1f);
     public static final Color WHITE       = new Color(1f, 1f, 1f, 1f);
-    // Primaries & Secondaries
     public static final Color RED         = new Color(1f, 0f, 0f, 1f);
     public static final Color GREEN       = new Color(0f, 1f, 0f, 1f);
     public static final Color BLUE        = new Color(0f, 0f, 1f, 1f);
     public static final Color YELLOW      = new Color(1f, 1f, 0f, 1f);
     public static final Color CYAN        = new Color(0f, 1f, 1f, 1f);
     public static final Color MAGENTA     = new Color(1f, 0f, 1f, 1f);
-    // Perceptual Grayscale (Derived via x^2.2 to perfectly match sRGB benchmarks)
     public static final Color LIGHT_GRAY  = new Color(0.53328f, 0.53328f, 0.53328f, 1f); // ~0.75 sRGB
     public static final Color GRAY        = new Color(0.21406f, 0.21406f, 0.21406f, 1f); // ~0.50 sRGB
     public static final Color DARK_GRAY   = new Color(0.04519f, 0.04519f, 0.04519f, 1f); // ~0.25 sRGB
 
-    private float r, g, b, a;       // linear
-    transient private float p;      // packed
+    private float r, g, b, a;  // linear
+    transient private float p; // packed
     transient private boolean d = true;
 
     public Color() { set(1,1,1,1); }
-    public Color(int intBits) { setIntBits(intBits); }
     public Color(Color color) { set(color); }
+    /** sRGB hex value --> linear Color */
     public Color(String hex) { setHex(hex); }
+    public Color(int intBits) { setIntBits(intBits); }
     public Color(float r, float g, float b, float a) { set(r, g, b, a); }
 
     public Color set(Color color) { return set(color.r,color.g,color.b,color.a); }
-    public Color setR(float r) { this.r = Math.clamp(r,0f,1f); d = true; return this; }
-    public Color setG(float g) { this.g = Math.clamp(g,0f,1f); d = true; return this; }
-    public Color setB(float b) { this.b = Math.clamp(b,0f,1f); d = true; return this; }
-    public Color setA(float a) { this.a = Math.clamp(a,0f,1f); d = true; return this; }
-
+    public Color setR(float r) { this.r = clamp(r); d = true; return this; }
+    public Color setG(float g) { this.g = clamp(g); d = true; return this; }
+    public Color setB(float b) { this.b = clamp(b); d = true; return this; }
+    public Color setA(float a) { this.a = clamp(a); d = true; return this; }
     public Color set(float r, float g, float b, float a) {
-        this.r = Math.clamp(r,0f,1f);
-        this.g = Math.clamp(g,0f,1f);
-        this.b = Math.clamp(b,0f,1f);
-        this.a = Math.clamp(a,0f,1f);
+        this.r = clamp(r);
+        this.g = clamp(g);
+        this.b = clamp(b);
+        this.a = clamp(a);
         this.d = true;
         return this;
     }
@@ -143,21 +140,13 @@ public class Color {
     }
 
     /**
-     * Premultiplies the color components by the alpha channel.
+     * Premultiplies the color components by the alpha channel. (Irreversible)
      * Note: This keeps the alpha channel exactly as it is for the GPU blending track.
      */
     public Color premultiplyAlpha() {
         return set(r * a, g * a, b * a, a);
     }
 
-    /**
-     * Reverses a premultiplied alpha conversion, returning the color components back to Straight space.
-     * If the alpha is completely transparent (0.0), the color channels are safely reset to 0.0 to prevent NaN errors.
-     */
-    public Color straightAlpha() {
-        if (a <= 0f) return set(0f, 0f, 0f, 0f);
-        return set(r / a, g / a, b / a, a);
-    }
 
     public float r() { return r; }
     public float g() { return g; }
@@ -292,18 +281,18 @@ public class Color {
     }
 
     public static Vector4f srgbToLinear(Vector4f srgb, Vector4f dst) {
-        dst.x = (float) Math.pow(Math.clamp(srgb.x,0f,1f), GAMMA);
-        dst.y = (float) Math.pow(Math.clamp(srgb.y,0f,1f), GAMMA);
-        dst.z = (float) Math.pow(Math.clamp(srgb.z,0f,1f), GAMMA);
-        dst.w = Math.clamp(srgb.w,0f,1f);
+        dst.x = (float) Math.pow(clamp(srgb.x), GAMMA);
+        dst.y = (float) Math.pow(clamp(srgb.y), GAMMA);
+        dst.z = (float) Math.pow(clamp(srgb.z), GAMMA);
+        dst.w = clamp(srgb.w);
         return dst;
     }
 
     public static Vector4f linearToSrgb(Vector4f linear, Vector4f dst) {
-        dst.x = (float) Math.pow(Math.clamp(linear.x,0f,1f), GAMMA_INV);
-        dst.y = (float) Math.pow(Math.clamp(linear.y,0f,1f), GAMMA_INV);
-        dst.z = (float) Math.pow(Math.clamp(linear.z,0f,1f), GAMMA_INV);
-        dst.w = Math.clamp(linear.w,0f,1f);
+        dst.x = (float) Math.pow(clamp(linear.x), GAMMA_INV);
+        dst.y = (float) Math.pow(clamp(linear.y), GAMMA_INV);
+        dst.z = (float) Math.pow(clamp(linear.z), GAMMA_INV);
+        dst.w = clamp(linear.w);
         return dst;
     }
 

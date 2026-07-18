@@ -111,6 +111,10 @@ public class ShaderProgram implements Disposable {
         return CURRENT_PROGRAM;
     }
 
+    public static ShaderProgram getProgramByName(String name) {
+        return PROGRAM_MAP.get(name);
+    }
+
     /** @return {@code true} if program exist */
     public static boolean useProgram(String name) {
         ShaderProgram program = PROGRAM_MAP.get(name);
@@ -141,6 +145,10 @@ public class ShaderProgram implements Disposable {
     public static void setTexture(String name, Texture texture) {
         if (CURRENT_PROGRAM == null) throw new IllegalStateException("No bound Program");
         CURRENT_PROGRAM.samplerManager.assignAndBind(name,texture);
+    }
+
+    public static void setUniformB(String name, boolean b) {
+        setUniformI(name, b ? 1 : 0);
     }
 
     public static void setUniformI(String name, int i) {

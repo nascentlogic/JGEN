@@ -38,6 +38,17 @@ public class Shader implements Iterable<Shader.File> {
     private final File[] files;
     private final String name;
 
+    public Shader(String name, String vSource, String fSource) {
+        this(name,vSource,null,fSource);
+    }
+
+    public Shader(String name, String vSource, String gSource, String fSource) {
+        this.files = new File[Type.array.length];
+        this.name = Objects.requireNonNull(name);
+        if (vSource != null) files[Type.VERT_SHADER.ordinal()] = new File(Type.VERT_SHADER,vSource);
+        if (gSource != null) files[Type.GEOM_SHADER.ordinal()] = new File(Type.GEOM_SHADER,gSource);
+        if (fSource != null) files[Type.FRAG_SHADER.ordinal()] = new File(Type.FRAG_SHADER,fSource);
+    }
 
     Shader(String name, File... files) {
         this.files = new File[Type.array.length];
