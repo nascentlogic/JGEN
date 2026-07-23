@@ -1,5 +1,8 @@
 package io.github.nascentlogic.jgen;
 
+import io.github.nascentlogic.jgen.gfx.Framebuffer;
+import io.github.nascentlogic.jgen.gfx.ShaderProgram;
+import io.github.nascentlogic.jgen.gfx.Texture;
 import io.github.nascentlogic.jgen.io.GameModuleProperties;
 import io.github.nascentlogic.jgen.io.Platform;
 import org.joml.Math;
@@ -22,7 +25,7 @@ import static org.joml.Math.min;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.glfw.GLFW.glfwGetMonitorPos;
 import static org.lwjgl.glfw.GLFW.glfwGetMonitors;
-import static org.lwjgl.opengl.GL11.GL_TRUE;
+import static org.lwjgl.opengl.GL11.*;
 
 /**
  * F.Dahl, 6/10/2026
@@ -407,6 +410,39 @@ public final class Window {
         if (gameResolution.x == 0 && gameResolution.y == 0)
             return framebufferResolution(dst);
         return dst.set(gameResolution);
+    }
+
+    /**
+     * Blits the game frame to the backbuffer, updating the texture's min/mag filters
+     * to match the current scaling scenario. Buffer is cleared black beforhand.
+     * <p>
+     * <b>Note:</b> Filter changes are not restored to avoid CPU-GPU pipeline stalls.
+     */
+    public void presentFrame(Texture frame, boolean linearToSrgb) {
+        Framebuffer.bindDefaultDraw();
+        if (viewport.x > 0 || viewport.y > 0) {
+            glClearColor(0, 0, 0, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        boolean sampleNearest;
+        {
+            int gameW = frame.width();
+            int gameH = frame.height();
+            int bbW = framebufferRes.x;
+            int bbH = framebufferRes.y;
+            sampleNearest = gameW == bbW && gameH == bbH;
+        }
+        if (sampleNearest) {
+            frame.filterNearest();
+        } else{
+            frame.filterLinear();
+        }
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+        glViewport(viewport.x,viewport.y,viewport.z,viewport.w);
+        if (linearToSrgb) ShaderProgram.internalPrograms().linearToSrgb(frame);
+        else ShaderProgram.internalPrograms().blit(frame);
     }
 
     /**

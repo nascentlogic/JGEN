@@ -4,6 +4,7 @@ import io.github.nascentlogic.jgen.Jgen;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.joml.Vector3i;
+import org.lwjgl.system.MemoryUtil;
 import org.tinylog.Logger;
 
 import java.nio.*;
@@ -243,6 +244,72 @@ public class Texture implements Disposable {
         }
     }
 
+    /**
+     * Downloads pixel data for a specific mipmap level into the provided direct NIO buffer.
+     * @param level the mipmap level to download (0 for base level)
+     * @param dst   the direct destination NIO buffer (must be large enough to hold the pixel data)
+     */
+    public void download(int level, Buffer dst) {
+        if (disposed || !allocated) throw new IllegalStateException("Texture is disposed or unallocated");
+        if (level < 0 || level >= mipLevels) throw new IllegalArgumentException("Invalid mipmap level: " + level);
+        glPixelStorei(GL_PACK_ALIGNMENT, format.alignment());
+        getTexImage(level, dst);
+    }
+
+    /**
+     * Downloads the full base level (Level 0) pixel data into the provided direct NIO buffer.
+     * @param dst the direct destination NIO buffer
+     */
+    public void download(Buffer dst) {
+        download(0, dst);
+    }
+
+    /**
+     * Downloads pixel data for a specific mipmap level into a direct ByteBuffer.
+     * @param level the mipmap level to download (0 for base level)
+     * @return a direct ByteBuffer containing the pixel data
+     */
+    public ByteBuffer downloadBytes(int level) {
+        Vector3i dims = mipLevelSize(level, new Vector3i());
+        int sizeBytes = dims.x * dims.y * dims.z * format.bytesPerPixel;
+        ByteBuffer pixels = MemoryUtil.memAlloc(sizeBytes);
+        try { download(level, pixels);
+            return pixels;
+        } catch (Throwable t) {
+            MemoryUtil.memFree(pixels);
+            throw t;
+        }
+    }
+
+    /**
+     * Downloads the full base level (Level 0) pixel data into a direct ByteBuffer
+     * @return a direct ByteBuffer containing base level pixel data
+     */
+    public ByteBuffer downloadBytes() {
+        return downloadBytes(0);
+    }
+
+    /**
+     * Downloads the base level (Level 0) of a 2D texture into a new Bitmap object.
+     * Note: 2D Texture (R8, RG8, RGB8, RGBA8, SRGB or SRGBA8)
+     * @return a new Bitmap containing the texture's pixel data
+     */
+    public Bitmap toBitmap() {
+        if (target != GL_TEXTURE_2D) throw new UnsupportedOperationException("toBitmap() only support 2D textures");
+        return new Bitmap(downloadBytes(), width, height, format.channels);
+    }
+
+    /**
+     * Downloads a specific mipmap level of a 2D texture into a new Bitmap object.
+     * Note: 2D Texture (R8, RG8, RGB8, RGBA8, SRGB or SRGBA8)
+     * @return a new Bitmap containing the texture's pixel data
+     */
+    public Bitmap toBitmap(int level) {
+        if (target != GL_TEXTURE_2D) throw new UnsupportedOperationException("toBitmap() only support 2D textures");
+        Vector3i dims = mipLevelSize(level, new Vector3i());
+        return new Bitmap(downloadBytes(level),dims.x,dims.y,format.channels);
+    }
+
     private void texSubImage1D(int level, int xOff, int w, Buffer data) {
         int f = format.format;
         int t = format.dataType;
@@ -252,7 +319,7 @@ public class Texture implements Disposable {
             case IntBuffer b   -> glTexSubImage1D(target, level, xOff, w, f, t, b);
             case ShortBuffer b -> glTexSubImage1D(target, level, xOff, w, f, t, b);
             default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
-        }
+        } Jgen.glCheckError();
     }
 
     private void texSubImage2D(int level, int xOff, int yOff, int w, int h, Buffer data) {
@@ -264,7 +331,7 @@ public class Texture implements Disposable {
             case IntBuffer b   -> glTexSubImage2D(target, level, xOff, yOff, w, h, f, t, b);
             case ShortBuffer b -> glTexSubImage2D(target, level, xOff, yOff, w, h, f, t, b);
             default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
-        }
+        } Jgen.glCheckError();
     }
 
     private void texSubImage3D(int level, int xOff, int yOff, int zOff, int w, int h, int d, Buffer data) {
@@ -276,12 +343,20 @@ public class Texture implements Disposable {
             case IntBuffer b   -> glTexSubImage3D(target, level, xOff, yOff, zOff, w, h, d, f, t, b);
             case ShortBuffer b -> glTexSubImage3D(target, level, xOff, yOff, zOff, w, h, d, f, t, b);
             default -> throw new IllegalArgumentException("Unsupported buffer: " + data.getClass().getName());
-        }
+        } Jgen.glCheckError();
     }
 
-
-
-
+    private void getTexImage(int level, Buffer dst) {
+        int f = format.format;
+        int t = format.dataType;
+        switch (dst) {
+            case ByteBuffer b  -> glGetTexImage(target, level, f, t, b);
+            case FloatBuffer b -> glGetTexImage(target, level, f, t, b);
+            case IntBuffer b   -> glGetTexImage(target, level, f, t, b);
+            case ShortBuffer b -> glGetTexImage(target, level, f, t, b);
+            default -> throw new IllegalArgumentException("Unsupported buffer: " + dst.getClass().getName());
+        } Jgen.glCheckError();
+    }
 
 
     public static long memoryUsed() {
@@ -300,7 +375,7 @@ public class Texture implements Disposable {
 
     private static int calcMipLevels(int width, int height, int depth) {
         int maxDim = Math.max(width, Math.max(height, depth));
-        return JgenMath.log2i(maxDim) + 1;
+        return JgenMath.log2iFloor(maxDim) + 1;
     }
 
     private static long sizeOf1D(TextureFormat format, int width, boolean mipmap) {
@@ -341,13 +416,5 @@ public class Texture implements Disposable {
             d = Math.max(1, d / 2);
         } return total;
     }
-
-
-
-
-
-
-
-
 
 }

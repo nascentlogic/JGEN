@@ -29,11 +29,20 @@ public class JgenMath {
 
     /**
      * Returns the base-2 logarithm floor integer of a value.
-     * Returns 0 for inputs <= 0.
+     * Returns 0 for inputs <= 1.
      */
-    public static int log2i(int value) {
-        if (value <= 0) return 0;
+    public static int log2iFloor(int value) {
+        if (value <= 1) return 0;
         return 31 - Integer.numberOfLeadingZeros(value);
+    }
+
+    /**
+     * Returns the base-2 logarithm ceiling integer of a value.
+     * Returns 0 for inputs <= 1.
+     */
+    public static int log2iCeil(int value) {
+        if (value <= 1) return 0;
+        return 32 - Integer.numberOfLeadingZeros(value - 1);
     }
 
     /**

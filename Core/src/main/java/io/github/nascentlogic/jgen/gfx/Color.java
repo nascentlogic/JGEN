@@ -2,7 +2,6 @@ package io.github.nascentlogic.jgen.gfx;
 
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import org.joml.Vector4f;
 
@@ -18,8 +17,6 @@ import static io.github.nascentlogic.jgen.utils.JgenMath.clamp;
  */
 public class Color {
 
-    public static float GAMMA = 2.2f;
-    public static float GAMMA_INV = 1f / GAMMA;
     public static final Color CLEAR       = new Color(0f, 0f, 0f, 0f);
     public static final Color BLACK       = new Color(0f, 0f, 0f, 1f);
     public static final Color WHITE       = new Color(1f, 1f, 1f, 1f);
@@ -29,9 +26,6 @@ public class Color {
     public static final Color YELLOW      = new Color(1f, 1f, 0f, 1f);
     public static final Color CYAN        = new Color(0f, 1f, 1f, 1f);
     public static final Color MAGENTA     = new Color(1f, 0f, 1f, 1f);
-    public static final Color LIGHT_GRAY  = new Color(0.53328f, 0.53328f, 0.53328f, 1f); // ~0.75 sRGB
-    public static final Color GRAY        = new Color(0.21406f, 0.21406f, 0.21406f, 1f); // ~0.50 sRGB
-    public static final Color DARK_GRAY   = new Color(0.04519f, 0.04519f, 0.04519f, 1f); // ~0.25 sRGB
 
     private float r, g, b, a;  // linear
     transient private float p; // packed
@@ -153,9 +147,9 @@ public class Color {
     public float b() { return b; }
     public float a() { return a; }
 
-    public float sR() { return (float) Math.pow(r, GAMMA_INV); }
-    public float sG() { return (float) Math.pow(g, GAMMA_INV); }
-    public float sB() { return (float) Math.pow(b, GAMMA_INV); }
+    public float sR() { return linearToSrgb(r); }
+    public float sG() { return linearToSrgb(g); }
+    public float sB() { return linearToSrgb(b); }
     public float sA() { return a; }
 
     public float packedFormat() {
@@ -179,9 +173,9 @@ public class Color {
     }
 
     public Vector4f toVec4Srgba(Vector4f dst) {
-        dst.x = (float) Math.pow(r, GAMMA_INV);
-        dst.y = (float) Math.pow(g, GAMMA_INV);
-        dst.z = (float) Math.pow(b, GAMMA_INV);
+        dst.x = linearToSrgb(r);
+        dst.y = linearToSrgb(g);
+        dst.z = linearToSrgb(b);
         dst.w = a;
         return dst;
     }
@@ -207,9 +201,9 @@ public class Color {
      * @return The dst vector populated with HSV+A data.
      */
     public Vector4f toVec4HSV(Vector4f dst) {
-        float sR = (float) Math.pow(r, Color.GAMMA_INV);
-        float sG = (float) Math.pow(g, Color.GAMMA_INV);
-        float sB = (float) Math.pow(b, Color.GAMMA_INV);
+        float sR = linearToSrgb(r);
+        float sG = linearToSrgb(g);
+        float sB = linearToSrgb(b);
         float max = Math.max(sR, Math.max(sG, sB)); // v
         float min = Math.min(sR, Math.min(sG, sB));
         float delta = max - min;
@@ -280,18 +274,28 @@ public class Color {
         return this.intBits();
     }
 
+    public static float srgbToLinear(float val) {
+        float c = Math.clamp(val, 0.0f, 1.0f);
+        return (c <= 0.04045f) ? (c / 12.92f) : (float) Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    public static float linearToSrgb(float val) {
+        float c = Math.clamp(val, 0.0f, 1.0f);
+        return (c <= 0.0031308f) ? (c * 12.92f) : (float) (1.055 * Math.pow(c, 1.0 / 2.4) - 0.055);
+    }
+
     public static Vector4f srgbToLinear(Vector4f srgb, Vector4f dst) {
-        dst.x = (float) Math.pow(clamp(srgb.x), GAMMA);
-        dst.y = (float) Math.pow(clamp(srgb.y), GAMMA);
-        dst.z = (float) Math.pow(clamp(srgb.z), GAMMA);
+        dst.x = srgbToLinear(srgb.x);
+        dst.y = srgbToLinear(srgb.y);
+        dst.z = srgbToLinear(srgb.z);
         dst.w = clamp(srgb.w);
         return dst;
     }
 
     public static Vector4f linearToSrgb(Vector4f linear, Vector4f dst) {
-        dst.x = (float) Math.pow(clamp(linear.x), GAMMA_INV);
-        dst.y = (float) Math.pow(clamp(linear.y), GAMMA_INV);
-        dst.z = (float) Math.pow(clamp(linear.z), GAMMA_INV);
+        dst.x = linearToSrgb(linear.x);
+        dst.y = linearToSrgb(linear.y);
+        dst.z = linearToSrgb(linear.z);
         dst.w = clamp(linear.w);
         return dst;
     }
@@ -426,9 +430,9 @@ public class Color {
             int bBits = Integer.parseInt(hex.substring(start + 4, start + 6), 16);
             int aBits = (length == 8) ? Integer.parseInt(hex.substring(start + 6, start + 8), 16) : 255;
             return dst.set(
-                    (float) Math.pow(rBits / 255f, GAMMA),
-                    (float) Math.pow(gBits / 255f, GAMMA),
-                    (float) Math.pow(bBits / 255f, GAMMA),
+                    srgbToLinear(rBits / 255f),
+                    srgbToLinear(gBits / 255f),
+                    srgbToLinear(bBits / 255f),
                     aBits / 255f);
         } catch (NumberFormatException e) {
             return dst.set(1f, 1f, 1f, 1f);
@@ -467,41 +471,60 @@ public class Color {
         @Override
         public void write(JsonWriter out, Color color) throws IOException {
             if (color != null) {
-                int r = (int) (Math.pow(color.r,GAMMA_INV) * 255f) & 0xFF;
-                int g = (int) (Math.pow(color.g,GAMMA_INV) * 255f) & 0xFF;
-                int b = (int) (Math.pow(color.b,GAMMA_INV) * 255f) & 0xFF;
-                int a = (int) (color.a * 255f) & 0xFF;
-                char[] buffer = CHAR_BUFFER.get();
-                buffer[0] = '#';
-                buffer[1] = HEX_CHARS[(r >>> 4) & 0xF];  buffer[2] = HEX_CHARS[r & 0xF];
-                buffer[3] = HEX_CHARS[(g >>> 4) & 0xF];  buffer[4] = HEX_CHARS[g & 0xF];
-                buffer[5] = HEX_CHARS[(b >>> 4) & 0xF];  buffer[6] = HEX_CHARS[b & 0xF];
-                buffer[7] = HEX_CHARS[(a >>> 4) & 0xF];  buffer[8] = HEX_CHARS[a & 0xF];
-                out.value(new String(buffer));
+                out.beginArray();
+                out.value(linearToSrgb(color.r));
+                out.value(linearToSrgb(color.g));
+                out.value(linearToSrgb(color.b));
+                out.value(color.a); // Alpha does not use gamma correction
+                out.endArray();
             } else out.nullValue();
+            //if (color != null) {
+            //    int r = (int) (linearToSrgb(color.r) * 255f) & 0xFF;
+            //    int g = (int) (linearToSrgb(color.g) * 255f) & 0xFF;
+            //    int b = (int) (linearToSrgb(color.b) * 255f) & 0xFF;
+            //    int a = (int) (color.a * 255f) & 0xFF;
+            //    char[] buffer = CHAR_BUFFER.get();
+            //    buffer[0] = '#';
+            //    buffer[1] = HEX_CHARS[(r >>> 4) & 0xF];  buffer[2] = HEX_CHARS[r & 0xF];
+            //    buffer[3] = HEX_CHARS[(g >>> 4) & 0xF];  buffer[4] = HEX_CHARS[g & 0xF];
+            //    buffer[5] = HEX_CHARS[(b >>> 4) & 0xF];  buffer[6] = HEX_CHARS[b & 0xF];
+            //    buffer[7] = HEX_CHARS[(a >>> 4) & 0xF];  buffer[8] = HEX_CHARS[a & 0xF];
+            //    out.value(new String(buffer));
+            //} else out.nullValue();
         }
 
         @Override
         public Color read(JsonReader in) throws IOException {
-            if (in.peek() == JsonToken.NULL) {
+            if (in.peek() == com.google.gson.stream.JsonToken.NULL) {
                 in.nextNull();
                 return null;
-            } String value = in.nextString();
-            if (value == null || value.isEmpty()) return new Color();
-            int start = value.charAt(0) == '#' ? 1 : 0;
-            int length = value.length() - start;
-            if (length != 6 && length != 8) return new Color();
-            try {
-                int rBits = parseHexPair(value, start);
-                int gBits = parseHexPair(value, start + 2);
-                int bBits = parseHexPair(value, start + 4);
-                int aBits = (length == 8) ? parseHexPair(value, start + 6) : 255;
-                float r = (float) Math.pow(rBits / 255f, GAMMA);
-                float g = (float) Math.pow(gBits / 255f, GAMMA);
-                float b = (float) Math.pow(bBits / 255f, GAMMA);
-                float a = aBits / 255f;
-                return new Color(r,g,b,a);
-            } catch (Exception e) { return new Color(); }
+            }
+            in.beginArray();
+            float r = srgbToLinear((float) in.nextDouble());
+            float g = srgbToLinear((float) in.nextDouble());
+            float b = srgbToLinear((float) in.nextDouble());
+            float a = (float) in.nextDouble();
+            in.endArray();
+            return new Color(r, g, b, a);
+            //if (in.peek() == JsonToken.NULL) {
+            //    in.nextNull();
+            //    return null;
+            //} String value = in.nextString();
+            //if (value == null || value.isEmpty()) return new Color();
+            //int start = value.charAt(0) == '#' ? 1 : 0;
+            //int length = value.length() - start;
+            //if (length != 6 && length != 8) return new Color();
+            //try {
+            //    int rBits = parseHexPair(value, start);
+            //    int gBits = parseHexPair(value, start + 2);
+            //    int bBits = parseHexPair(value, start + 4);
+            //    int aBits = (length == 8) ? parseHexPair(value, start + 6) : 255;
+            //    float r = srgbToLinear(rBits / 255f);
+            //    float g = srgbToLinear(gBits / 255f);
+            //    float b = srgbToLinear(bBits / 255f);
+            //    float a = aBits / 255f;
+            //    return new Color(r,g,b,a);
+            //} catch (Exception e) { return new Color(); }
         }
 
         private int parseHexPair(String str, int index) {

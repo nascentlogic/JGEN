@@ -2,11 +2,14 @@ package io.github.nascentlogic.jgen.gfx;
 
 import io.github.nascentlogic.jgen.Jgen;
 import io.github.nascentlogic.jgen.utils.Disposable;
+import io.github.nascentlogic.jgen.utils.TextureRegion;
 import org.joml.Vector2i;
 import org.joml.Vector4i;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.tinylog.Logger;
 
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.Objects;
@@ -47,7 +50,7 @@ public class Framebuffer implements Disposable {
     public int height() { return height; }
     public boolean isDisposed() { return disposed; }
 
-    public void attachTexture(Texture texture, int slot, boolean disposeWithFbo) {
+    public void attachTexture(Texture texture, int slot, boolean disposeWithFBO) {
         Objects.requireNonNull(texture, "Illegal null argument for color attachment");
         if (disposed) throw new IllegalStateException("Illegal attach call on disposed Framebuffer");
         if (texture.isDisposed() || !texture.isAllocated())
@@ -61,7 +64,7 @@ public class Framebuffer implements Disposable {
         bindDraw();
         // glFramebufferTexture universally handles standard 2D, Cube Maps, and Multisample textures automatically
         glFramebufferTexture(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + slot, texture.handle(), 0);
-        attachments[slot] = new Attachment(texture, disposeWithFbo);
+        attachments[slot] = new Attachment(texture, disposeWithFBO);
     }
 
     public void attachTextureLayer(Texture texture, int slot, int layer) {
@@ -105,6 +108,11 @@ public class Framebuffer implements Disposable {
         } return null;
     }
 
+    public void bindBoth() {
+        bindRead();
+        bindDraw();
+    }
+
     public void bindDraw() {
         if (disposed) throw new IllegalStateException("Illegal bind on disposed Framebuffer");
         if (DRAW_BUFFER != handle) {
@@ -138,7 +146,7 @@ public class Framebuffer implements Disposable {
     }
 
     public void readbuffer(int slot) {
-        if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for read");
+        if (READ_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for read");
         glReadBuffer(GL_COLOR_ATTACHMENT0 + slot);
     }
 
@@ -300,6 +308,42 @@ public class Framebuffer implements Disposable {
     }
 
 
+    /** @see #toBitmap(int, int, int, int, int) */
+    public Bitmap toBitmap(int slot) {
+        return toBitmap(slot,0,0,width,height);
+    }
+
+    /** @see #toBitmap(int, int, int, int, int) */
+    public Bitmap toBitmap(int slot, TextureRegion region) {
+        return toBitmap(slot,region.x,region.y,region.w,region.h);
+    }
+
+    /**
+     * Reads a region of a specified attachment slot from the FBO into a new Bitmap.
+     * The user is responsible for respecting the FBO bounds and passing a valid color slot.
+     * The Framebuffer must currently be bound as the active read framebuffer.
+     */
+    public Bitmap toBitmap(int slot, int x, int y, int w, int h) {
+        if (disposed) throw new IllegalStateException("Illegal download call on disposed Framebuffer");
+        if (!attachmentExist(slot)) throw new IllegalStateException("No such attachment slot: [" + slot + "] in Framebuffer");
+        Texture texture = attachments[slot].texture;
+        TextureFormat f = texture.format();
+        int size = w * h * f.bytesPerPixel;
+        ByteBuffer buffer = MemoryUtil.memAlloc(size);
+        try {
+            readbuffer(slot);
+            checkReadStatus();
+            glPixelStorei(GL_PACK_ALIGNMENT, f.alignment());
+            glReadPixels(x, y, w, h, f.format, f.dataType, buffer);
+            Jgen.glCheckError();
+            return new Bitmap(buffer, w, h, f.channels);
+        } catch (Throwable t) {
+            MemoryUtil.memFree(buffer);
+            throw t;
+        }
+    }
+
+
     public static void bindDefaultDraw() {
         if (DRAW_BUFFER != GL_NONE) {
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER,GL_NONE);
@@ -347,6 +391,25 @@ public class Framebuffer implements Disposable {
 
     public static int maxColorAttachments() {
         return MAX_COLOR_ATTACHMENTS;
+    }
+
+    public static Framebuffer[] pingPongBuffers(TextureFormat format, int width, int height, boolean disposeWithFBO) {
+        Framebuffer[] buffers = new Framebuffer[2];
+        for (int i = 0; i < 2; i++) {
+            Texture texture = Texture.generate2D(width, height);
+            texture.allocate(format,false);
+            texture.filterNearest();
+            texture.clampToEdge();
+            Framebuffer buffer = new Framebuffer(width, height);
+            buffer.bindBoth();
+            buffer.attachTexture(texture,0,disposeWithFBO);
+            buffer.drawbuffer(0);
+            buffer.readbuffer(0);
+            Framebuffer.checkReadStatus();
+            Framebuffer.checkDrawStatus();
+            Jgen.glCheckError();
+            buffers[i] = buffer;
+        } return buffers;
     }
 
     public static void checkDrawStatus() {

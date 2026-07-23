@@ -1,16 +1,20 @@
 package io.github.nascentlogic.jgen.gfx;
 
 import io.github.nascentlogic.jgen.Jgen;
+import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.io.Shader;
 import io.github.nascentlogic.jgen.utils.Disposable;
+import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.joml.*;
 import org.lwjgl.system.MemoryStack;
 import org.tinylog.Logger;
 
+import java.lang.Math;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.*;
 
+import static io.github.nascentlogic.jgen.gfx.TextureFormat.RG16UI;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.glGetIntegerv;
 import static org.lwjgl.opengl.GL20.*;
@@ -40,9 +44,11 @@ public class ShaderProgram implements Disposable {
         }
     }
 
+    private static InternalPrograms internalPrograms;
     private static final Map<String, ShaderProgram> PROGRAM_MAP = HashMap.newHashMap(64);
     private static ShaderProgram CURRENT_PROGRAM = null;
     private static int INVALID_UNIFORM_LOCATION = -1;
+
 
     private int handle;
     private final String name;
@@ -107,6 +113,11 @@ public class ShaderProgram implements Disposable {
         handle = GL_NONE;
     }
 
+    public static InternalPrograms internalPrograms() {
+        if (internalPrograms == null) internalPrograms = new InternalPrograms();
+        return internalPrograms;
+    }
+
     public static ShaderProgram currentProgram() {
         return CURRENT_PROGRAM;
     }
@@ -135,6 +146,7 @@ public class ShaderProgram implements Disposable {
     /** Called by the engine before Jgen shuts down.
      * No need to delete them manually. */
     public static void deleteAllPrograms() {
+        Disposable.free(internalPrograms);
         PROGRAM_MAP.values().forEach(program -> {
             glDeleteProgram(program.handle);
             program.handle = GL_NONE;
@@ -618,6 +630,193 @@ public class ShaderProgram implements Disposable {
 
 
 
+    public static final class InternalPrograms implements Disposable {
+
+        private ShaderProgram blitProgram;
+        private ShaderProgram srgbProgram;
+        private ShaderProgram udfSeedProgram;
+        private ShaderProgram udfJumpProgram;
+        private ShaderProgram udfResolveProgram;
+        private final int blitVao;
+        private final int srgbVao;
+        private final int udfVao;
+
+        private final int vbo;
+        private final int ebo;
+
+        InternalPrograms() {
+            try {
+                blitProgram = new ShaderProgram(new Shader("jgen-blit", blitVSource(), blitFSource()));
+                blitProgram.use();
+                ShaderProgram.setUniformI("uTexture",0);
+                srgbProgram = new ShaderProgram(new Shader("jgen-linearToSrgb", blitVSource(), srgbFSource()));
+                srgbProgram.use();
+                ShaderProgram.setUniformI("uTexture", 0);
+                udfSeedProgram = new ShaderProgram(Disk.resourceShader("udf-seed","jgen/glsl/udf"));
+                udfJumpProgram = new ShaderProgram(Disk.resourceShader("udf-jump","jgen/glsl/udf"));
+                udfResolveProgram = new ShaderProgram(Disk.resourceShader("udf-resolve","jgen/glsl/udf"));
+                ShaderProgram.useNone();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            // Generate Shared GPU Buffers
+            // Allocate once: 1 quad capacity (16 floats of vertex data)
+            vbo = Buffers.generateVBO(GL_DYNAMIC_DRAW, 16 * Float.BYTES);
+            ebo = Buffers.generateQuadEBO(1);
+            blitVao = generateDefaultVAO();
+            srgbVao = generateDefaultVAO();
+            udfVao = generateDefaultVAO();
+            Buffers.bindVBO(0);
+            Buffers.bindVAO(0);
+        }
+
+
+        /** Generates a complet VAO with attributes.
+         * The vao can be used with {@link #draw(int)} to render quads */
+        public int generateDefaultVAO() {
+            int vao = Buffers.generateBindVAO();
+            Buffers.bindEBO(ebo);
+            Buffers.bindVBO(vbo);
+            int stride = 4 * Float.BYTES;
+            glVertexAttribPointer(0, 2, GL_FLOAT, false, stride, 0);
+            glVertexAttribPointer(1, 2, GL_FLOAT, false, stride, 2 * Float.BYTES);
+            glEnableVertexAttribArray(0);
+            glEnableVertexAttribArray(1);
+            return vao;
+        }
+
+        /**
+         * Generates an Unsigned Distance Field (UDF) texture stored as GL_R16F.
+         * @param source   4 channel input 2D texture
+         * @param distFunc 0 = Euclidean, 1 = Manhattan, 2 = Chebyshev
+         * @return GL_R16F texture containing raw pixel distances
+         */
+        public Texture generateDistanceField(Texture source, int distFunc) {
+            final int width = source.width();
+            final int height = source.height();
+            int drawBuffer = 0;
+            int readBuffer = 1;
+            Framebuffer[] seedBuffers = Framebuffer.pingPongBuffers(RG16UI,width,height,true);
+
+            // --- PASS 1: Initialize Seeds ---
+            udfSeedProgram.use();
+            //Framebuffer.checkDrawStatus();
+            ShaderProgram.setTexture("uSource",source); // from source
+            seedBuffers[drawBuffer].bindDraw();
+            draw(udfVao); // draw fullscreen quad
+
+            // --- PASS 2: JFA Ping-Pong Propagation Loop ---
+            int totalPasses = JgenMath.log2iCeil(Math.max(width, height));
+            int stepSize = 1 << (totalPasses - 1); // Start at maxDim / 2
+            udfJumpProgram.use();
+            for (int i = 0; i < totalPasses; i++) {
+                int tmp = drawBuffer;
+                drawBuffer = readBuffer;
+                readBuffer = tmp;
+                seedBuffers[drawBuffer].bindDraw();
+                ShaderProgram.setTexture("uSource",seedBuffers[readBuffer].attachment(0));
+                ShaderProgram.setUniformI("uStepSize",stepSize);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+                stepSize /= 2;
+            }
+            // --- PASS 3: Resolve Final Distances ---
+            Texture distanceField = Texture.generate2D(width,height);
+            distanceField.allocate(TextureFormat.R16F,false);
+            distanceField.filterNearest();
+            distanceField.clampToEdge();
+            Framebuffer resolveFBO = new Framebuffer(width,height);
+            resolveFBO.bindDraw();
+            resolveFBO.attachTexture(distanceField,0,false);
+            resolveFBO.drawbuffer(0);
+            udfResolveProgram.use();
+            ShaderProgram.setTexture("uSource",seedBuffers[drawBuffer].attachment(0));
+            ShaderProgram.setUniformI("uDistFunc",distFunc);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+
+            Disposable.free(seedBuffers); // attached textures are disposed
+            resolveFBO.free(); // attached texture is not disposed
+            return distanceField;
+        }
+
+
+        public void blit(Texture source) { blit(source,0,0,1,1,0,0,1,1); }
+        public void blit(Texture source, float x1, float y1, float x2, float y2, float u1, float v1, float u2, float v2) {
+            blitProgram.use();
+            source.bindToSlot(0);
+            draw(blitVao, x1, y1, x2, y2, u1, v1, u2, v2);
+        }
+
+        public void linearToSrgb(Texture source) {
+            srgbProgram.use();
+            source.bindToSlot(0);
+            draw(srgbVao);
+        }
+
+        // todo drawRepeat
+        public void draw(int targetVao) { draw(targetVao, 0,0,1,1,0,0,1,1); }
+        public void draw(int targetvao, float x1, float y1, float x2, float y2, float u1, float v1, float u2, float v2) {
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                FloatBuffer buffer = stack.mallocFloat(16);
+                buffer.put(x1).put(y2).put(u1).put(v2); // v0: Top-Left     -> Uses Top UV (v2 = 1.0)
+                buffer.put(x1).put(y1).put(u1).put(v1); // v1: Bottom-Left  -> Uses Bottom UV (v1 = 0.0)
+                buffer.put(x2).put(y1).put(u2).put(v1); // v2: Bottom-Right -> Uses Bottom UV (v1 = 0.0)
+                buffer.put(x2).put(y2).put(u2).put(v2); // v3: Top-Right    -> Uses Top UV (v2 = 1.0)
+                Buffers.bindVBO(vbo);
+                buffer.flip();
+                Buffers.uploadVBO(buffer);
+                Buffers.bindVAO(targetvao);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+            }
+        }
+
+        private String blitVSource() {
+            return """
+                    layout(location = 0) in vec2 aPos;
+                    layout(location = 1) in vec2 aTexCoord;
+                    out vec2 vTexCoord;
+                    void main() {
+                        vTexCoord = aTexCoord;
+                        gl_Position = vec4(aPos * 2.0 - 1.0, 0.0, 1.0);
+                    }""";
+
+        }
+
+        private String blitFSource() {
+            return """
+                    layout(location = 0) out vec4 fColor;
+                    uniform sampler2D uTexture;
+                    in vec2 vTexCoord;
+                    void main() {
+                        fColor = texture(uTexture, vTexCoord);
+                    }""";
+        }
+
+        private String srgbFSource() {
+            return """
+                    layout(location = 0) out vec4 fColor;
+                    uniform sampler2D uTexture;
+                    in vec2 vTexCoord;
+                    vec3 linearToSRGB(vec3 c) {
+                        vec3 cutoff = vec3(lessThan(c, vec3(0.0031308)));
+                        vec3 higher = 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055;
+                        vec3 lower = 12.92 * c;
+                        return mix(higher, lower, cutoff);
+                    }
+                    void main() {
+                        vec4 texColor = texture(uTexture, vTexCoord);
+                        vec3 srgbColor = linearToSRGB(texColor.rgb);
+                        fColor = vec4(srgbColor, texColor.a);
+                    }""";
+        }
+
+        @Override
+        public void free() {
+            Buffers.deleteVAO(blitVao);
+            Buffers.deleteVAO(srgbVao);
+            Buffers.deleteVAO(udfVao);
+            Buffers.deleteBuffers(vbo,ebo);
+        }
+    }
 
 
 }

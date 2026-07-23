@@ -1,13 +1,12 @@
 package org.example;
 
-import io.github.nascentlogic.jgen.gfx.Buffers;
-import io.github.nascentlogic.jgen.gfx.Color;
-import io.github.nascentlogic.jgen.gfx.ShaderProgram;
-import io.github.nascentlogic.jgen.gfx.Texture;
+import io.github.nascentlogic.jgen.gfx.*;
 import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.io.Shader;
 import io.github.nascentlogic.jgen.utils.Disposable;
+import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.joml.Matrix4f;
+import org.joml.Vector2i;
 import org.joml.Vector4f;
 import org.joml.primitives.Rectanglef;
 import org.lwjgl.system.MemoryUtil;
@@ -16,6 +15,8 @@ import java.nio.FloatBuffer;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11.GL_FLOAT;
+import static org.lwjgl.opengl.GL14.GL_FUNC_ADD;
+import static org.lwjgl.opengl.GL14.glBlendEquation;
 import static org.lwjgl.opengl.GL15.GL_DYNAMIC_DRAW;
 import static org.lwjgl.opengl.GL20.glEnableVertexAttribArray;
 import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
@@ -23,7 +24,7 @@ import static org.lwjgl.opengl.GL20.glVertexAttribPointer;
 /**
  * F.Dahl, 7/10/2026
  */
-public class SpriteBatch implements Disposable {
+public class SpriteRenderer implements Disposable {
 
     private static final int SAMPLER_ARRAY_SIZE = 15;
     private static final int VERTEX_SIZE_FLOAT = 6;
@@ -53,26 +54,31 @@ public class SpriteBatch implements Disposable {
     private final int vbo;
     private final int ebo;
 
-    private int count;
     private final int limit;
+    private int count;
     private int drawCalls;
     private boolean rendering;
     private boolean antiAlias;
 
-    private final ShaderProgram program;
+    private final Matrix4f screenSpaceMatrix = new Matrix4f();
+    private final ShaderProgram batchProgram;
+    private Framebuffer batchBuffer;
 
-    public SpriteBatch(int capacity) throws Exception {
+
+    public SpriteRenderer(Vector2i resolution, int batchCapacity) throws Exception {
+        batchBuffer = createFramebuffer(resolution.x,resolution.y);
+        JgenMath.screenSpaceMatrix(resolution.x,resolution.y,screenSpaceMatrix);
         ShaderProgram program = ShaderProgram.getProgramByName(PROGRAM_NAME);
         if (program == null) {
             Shader shader = Disk.resourceShader(PROGRAM_NAME,PROGRAM_DIR);
             program = new ShaderProgram(shader);
-        } this.program = program;
+        } this.batchProgram = program;
         program.use();
         int[] samplers = new int[SAMPLER_ARRAY_SIZE];
         for (int i = 0; i < SAMPLER_ARRAY_SIZE; i++) samplers[i] = i;
         ShaderProgram.setUniformI("uTextures",samplers);
         ShaderProgram.useNone();
-        limit = Math.clamp(capacity, 128, SPRITE_COUNT_LIMIT);
+        limit = Math.clamp(batchCapacity, 128, SPRITE_COUNT_LIMIT);
         int bufferSizeFloat = limit * SPRITE_SIZE_FLOAT;
         vertices = MemoryUtil.memAllocFloat(bufferSizeFloat);
         vao = Buffers.generateBindVAO();
@@ -92,17 +98,19 @@ public class SpriteBatch implements Disposable {
         Buffers.bindVAO(0);
     }
 
-    /*
-        Blending and frambuffers etc. must be handled manually before you begin.
-        Normally it's better to premultyply alpha on the Bitmap before uploading it to a texture,
-        then use glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA):
-     */
 
-    public void begin(Matrix4f projView, boolean outputSrgba) {
+    public void begin() { begin(screenSpaceMatrix); }
+    public void begin(Matrix4f projView) {
         if (!rendering) {
-            program.use();
+            batchProgram.use();
             ShaderProgram.setUniformF("uCombined",projView);
-            ShaderProgram.setUniformB("uOutputSrgba",outputSrgba);
+            batchBuffer.bindDraw();
+            batchBuffer.viewport();
+            batchBuffer.clearColor(0,0,0,0,0);
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
             drawCalls = 0;
             rendering = true;
         }
@@ -112,6 +120,7 @@ public class SpriteBatch implements Disposable {
         if (rendering) {
             flush();
             ShaderProgram.useNone();
+            batchBuffer.unbind();
             rendering = false;
         }
     }
@@ -220,13 +229,28 @@ public class SpriteBatch implements Disposable {
         antiAlias = enable;
     }
 
+    public Texture texture() {
+        return batchBuffer.attachment(0);
+    }
+
     @Override
     public void free() {
         MemoryUtil.memFree(vertices);
         Buffers.deleteVAO(vao);
         Buffers.deleteBuffers(vbo,ebo);
+        Disposable.free(batchBuffer);
     }
 
+    private Framebuffer createFramebuffer(int width, int height) {
+        Texture texture = Texture.generate2D(width,height);
+        texture.allocate(TextureFormat.RGBA16F,false);
+        texture.filterNearest();
+        texture.clampToBorder();
+        Framebuffer framebuffer = new Framebuffer(width, height);
+        framebuffer.attachTexture(texture,0,true);
+        framebuffer.drawbuffer(0);
+        return framebuffer;
+    }
 
     private int getTextureSlot(Texture texture) {
         // Check previously bound slot cache

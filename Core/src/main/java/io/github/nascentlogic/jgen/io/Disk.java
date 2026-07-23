@@ -901,6 +901,7 @@ public final class Disk {
     private static ByteBuffer resourcesRead(String filePath, boolean directAlloc) throws IOException {
         Objects.requireNonNull(filePath,"String filePath is null");
         filePath = filePath.startsWith("/") ? filePath : "/" + filePath;
+        Logger.debug("<-- \"{}\"",filePath);
         try (InputStream is = Disk.class.getResourceAsStream(filePath)) {
             if (is == null) throw new FileNotFoundException("Resource could not be found: " + filePath);
             byte[] bytes = is.readAllBytes();
@@ -1421,12 +1422,12 @@ public final class Disk {
                 fileSystemDelete(cachePathPng);
             }
             else try {
-                BitmapAtlas bitmapAtlas = loadJson(BitmapAtlas.class,cachePathJson);
-                if (bitmapAtlas != null && !bitmapAtlas.isOutdated(modifiedHash[0])) {
+                BitmapAtlas atlas = loadJson(BitmapAtlas.class,cachePathJson);
+                if (atlas != null && !atlas.isOutdated(modifiedHash[0])) {
                     Bitmap atlasBitmap = new Bitmap(load(cachePathPng,true));
-                    bitmapAtlas.setBitmap(atlasBitmap);
-                    bitmapAtlas.rebuildLookupMap();
-                    return bitmapAtlas;
+                    atlas.setBitmap(atlasBitmap);
+                    atlas.rebuildLookupMap();
+                    return atlas;
                 }
             } catch (IOException e) { Logger.warn(e);}
         }
