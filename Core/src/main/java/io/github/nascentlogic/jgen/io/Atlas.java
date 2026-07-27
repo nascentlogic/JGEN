@@ -7,24 +7,21 @@ import io.github.nascentlogic.jgen.utils.TextureRegion;
 import org.joml.Vector2i;
 import org.tinylog.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import static org.lwjgl.opengl.GL11.GL_NEAREST;
+import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
+
 
 /**
- * F.Dahl, 7/20/2026
+ * F.Dahl, 7/25/2026
  */
-public class Atlas implements Disposable  {
+public class Atlas implements Disposable {
 
     public static final int PACK_MARGIN = 2;
     public static final String FILE_SUFFIX = "_atlas";
-
-    public static final class Info {
-        String name = "";
-        int modifiedHash = 0;
-        int margin = PACK_MARGIN;
-        boolean[] imageTypes = new boolean[ImageType.array.length];
-        List<Entry> entries = List.of();
-        private Info() { /* GSON */}
-    }
 
     public enum ImageType {
         COLOR(""),
@@ -40,10 +37,24 @@ public class Atlas implements Disposable  {
         }
     }
 
+    public record SorurceImage(Bitmap bitmap, String name) {
+        public SorurceImage(Bitmap bitmap, String name) {
+            this.bitmap = Objects.requireNonNull(bitmap);
+            this.name = name == null ? "" : name;
+        }
+    }
+
+    public record PackedImage(Bitmap bitmap, List<Entry> entries) {
+        public PackedImage(Bitmap bitmap, List<Entry> entries) {
+            this.entries = entries == null ? List.of() : entries;
+            this.bitmap = bitmap;
+        }
+    }
+
     public record Entry(String name, TextureRegion region) {
         public Entry(String name, TextureRegion region) {
-            this.region = Objects.requireNonNull(region, "Region cannot be null");
-            this.name = Objects.requireNonNull(name, "name cannot be null");
+            this.region = Objects.requireNonNull(region);
+            this.name = Objects.requireNonNull(name);
         } public boolean equals(Object obj) {
             if (obj == this) return true;
             if (obj == null || getClass() != obj.getClass()) return false;
@@ -54,169 +65,91 @@ public class Atlas implements Disposable  {
         }
     }
 
-    private final transient Bitmap[] bitmaps = new Bitmap[ImageType.array.length];
-    private transient Map<String,TextureRegion> regionMap;
-    private Info info;
+    public static final class Info {
+        public String name = "";
+        public String directory = "";
+        public String cache = "";
+        public int mondifiedHash = 0;
+        public int margin = PACK_MARGIN;
+        public List<Entry> entries = new ArrayList<>();
+        public Info() { /* GSON */ }
+    }
 
+    public static class TextureGen {
+        /** Alloacate mipmaps. 0 = false */
+        public int texMipmap = 0;
+        /** Texture filter */
+        public int texFilter = GL_NEAREST;
+        /** Texture wrap  */
+        public int texeWrap = GL_CLAMP_TO_EDGE;
+        /** 0 = Euclidean, 1 = Manhattan, 2 = Chebyshev */
+        public int distFunc = 0;
+        public int maxDist = 38;
+        /** */
+        public float heightExp = 0.55f;
+        /** */
+        public float luminanceInfluence = 1.0f;
+        /** */
+        public float luminanceExp = 0.45f;
+        /** Luminance influence on height output */
+        public float heightDetail = 0.55f;
+        /** Scale strength of normal output.*/
+        public float normalScalar = 1.15f;
 
-    private Atlas() { /* GSON */ }
+    }
+
+    private final Bitmap[] bitmaps = new Bitmap[ImageType.array.length];
+    private final Info info;
 
     Atlas(Info info, Bitmap[] bitmaps) {
-
+        this.info = Objects.requireNonNull(info);
+        Objects.requireNonNull(bitmaps);
+        System.arraycopy(bitmaps, 0, this.bitmaps, 0, bitmaps.length);
     }
 
-    Atlas(String name, List<Bitmap> bitmaps, List<String> names, int modifiedHash) {
-
+    Atlas(Info info, List<SorurceImage> images) {
+        Objects.requireNonNull(images);
+        this.info = Objects.requireNonNull(info);
+        PackedImage packed = pack(images,info.margin,true);
+        this.bitmaps[ImageType.COLOR.ordinal()] = packed.bitmap();
+        this.info.entries = packed.entries();
     }
 
-
-
-    public Bitmap bitmap(ImageType type) { return bitmaps[type.ordinal()]; }
-
-    public List<Entry> entries() {
-        return Collections.unmodifiableList(info.entries);
-    }
-
-    public TextureRegion get(String name) {
-        return regionMap.get(name);
-    }
-
-    public void free() { Disposable.free(bitmaps); }
-
-
-
-
-    void setBitmap(Bitmap bitmap, ImageType type) { bitmaps[type.ordinal()] = bitmap; }
-
-    void rebuildLookupMap() {
-        Map<String, TextureRegion> map = HashMap.newHashMap(info.entries.size());
-        for (Entry entry : info.entries) map.put(entry.name(), entry.region());
-        regionMap = map;
+    @Override
+    public void free() {
+        Disposable.free(bitmaps);
     }
 
 
-    private List<Entry> generateAtlas(List<Bitmap> bitmaps, List<String> names, int margin) {
-        int count = Math.min(bitmaps.size(),names.size());
-        if (count == 0) return List.of();
-        List<AtlasPacker.Rectangle> packRequest = new ArrayList<>(count);
-        int bitmapChannels = 1;
-        for (int i = 0; i < count; i++) {
-            Bitmap bitmap = bitmaps.get(i);
-            bitmapChannels = Math.max(
-                    bitmapChannels,
-                    bitmap.channels());
-            packRequest.add(new AtlasPacker.Rectangle(i,
-                    bitmap.width() + (margin * 2),
-                    bitmap.height() + (margin * 2)));
+    public static PackedImage pack(List<SorurceImage> images, int margin, boolean freeImages) {
+        if (images == null || images.isEmpty()) return new PackedImage(null,null);
+        margin = Math.max(0,margin);
+        int margin2 = margin * 2;
+        int nextID = 0;
+        int atlasChannels = 1;
+        List<AtlasPacker.Rectangle> packRequest = new ArrayList<>(images.size());
+        for (SorurceImage image : images) {
+            Bitmap bm = image.bitmap;
+            atlasChannels = Math.max(atlasChannels,bm.channels());
+            packRequest.add(new AtlasPacker.Rectangle(nextID++, bm.width() + margin2, bm.height() + margin2));
         } Vector2i size = new Vector2i();
-        List<AtlasPacker.Region> packResult;
-        packResult = AtlasPacker.pack(packRequest,size);
+        List<AtlasPacker.Region> packResult = AtlasPacker.pack(packRequest,size);
         if (packResult.isEmpty()) {
-            Logger.warn("Packing resulted in zero valid regions.");
-            return List.of();
-        }
-
-        return null;
+            if (freeImages) for (SorurceImage image : images) image.bitmap.free();
+            Logger.warn("Packing resulted in zero valid regions");
+            return new PackedImage(null,null);
+        } Bitmap bitmap = new Bitmap(size.x,size.y,atlasChannels);
+        List<Entry> entries = new ArrayList<>(packResult.size());
+        for (AtlasPacker.Region result : packResult) {
+            SorurceImage source = images.get(result.id());
+            TextureRegion region = result.r();
+            region.x += margin;
+            region.y += margin;
+            region.w = source.bitmap.width();
+            region.h = source.bitmap.height();
+            bitmap.blitRegion(source.bitmap, region.x, region.y);
+            entries.add(new Entry(source.name,region));
+            if (freeImages) source.bitmap.free();
+        } return new PackedImage(bitmap,entries);
     }
-
-    private void runEdgeExtrusion(Bitmap bitmap, List<Entry> entries, int margin) {
-        if (bitmap == null || entries.isEmpty() || margin <= 0) return;
-        final boolean hasAlpha = bitmap.channels() == 4;
-        for (Entry entry : entries) {
-            final TextureRegion region = entry.region();
-            final int rx = region.x;
-            final int ry = region.y;
-            final int rw = region.w;
-            final int rh = region.h;
-            final int rEdgeX = rx + rw - 1;
-            final int bEdgeY = ry + rh - 1;
-            final int tl = bitmap.getPixel(rx, ry);
-            final int tr = bitmap.getPixel(rEdgeX, ry);
-            final int bl = bitmap.getPixel(rx, bEdgeY);
-            final int br = bitmap.getPixel(rEdgeX, bEdgeY);
-            if (hasAlpha) {
-                for (int y = 0; y < rh; y++) {
-                    int targetY = ry + y;
-                    int l = bitmap.getPixel(rx, targetY);
-                    if ((l >>> 24) != 0) {
-                        for (int m = 1; m <= margin; m++) {
-                            bitmap.setPixel(l, rx - m, targetY);
-                        }
-                    }
-                    int r = bitmap.getPixel(rEdgeX, targetY);
-                    if ((r >>> 24) != 0) {
-                        for (int m = 1; m <= margin; m++) {
-                            bitmap.setPixel(r, rEdgeX + m, targetY);
-                        }
-                    }
-                }
-                for (int x = 0; x < rw; x++) {
-                    int targetX = rx + x;
-                    int t = bitmap.getPixel(targetX, ry);
-                    if ((t >>> 24) != 0) {
-                        for (int m = 1; m <= margin; m++) {
-                            bitmap.setPixel(t, targetX, ry - m);
-                        }
-                    }
-                    int b = bitmap.getPixel(targetX, bEdgeY);
-                    if ((b >>> 24) != 0) {
-                        for (int m = 1; m <= margin; m++) {
-                            bitmap.setPixel(b, targetX, bEdgeY + m);
-                        }
-                    }
-                } if ((tl >>> 24) != 0) {
-                    for (int mx = 1; mx <= margin; mx++) {
-                        for (int my = 1; my <= margin; my++) {
-                            bitmap.setPixel(tl, rx - mx, ry - my);
-                        }
-                    }
-                } if ((tr >>> 24) != 0) {
-                    for (int mx = 1; mx <= margin; mx++) {
-                        for (int my = 1; my <= margin; my++) {
-                            bitmap.setPixel(tr, rEdgeX + mx, ry - my);
-                        }
-                    }
-                } if ((bl >>> 24) != 0) {
-                    for (int mx = 1; mx <= margin; mx++) {
-                        for (int my = 1; my <= margin; my++) {
-                            bitmap.setPixel(bl, rx - mx, bEdgeY + my);
-                        }
-                    }
-                } if ((br >>> 24) != 0) {
-                    for (int mx = 1; mx <= margin; mx++) {
-                        for (int my = 1; my <= margin; my++) {
-                            bitmap.setPixel(br, rEdgeX + mx, bEdgeY + my);
-                        }
-                    }
-                }
-            } else {
-                for (int y = 0; y < rh; y++) {
-                    int targetY = ry + y;
-                    int l = bitmap.getPixel(rx, targetY);
-                    int r = bitmap.getPixel(rEdgeX, targetY);
-                    for (int m = 1; m <= margin; m++) {
-                        bitmap.setPixel(l, rx - m, targetY);
-                        bitmap.setPixel(r, rEdgeX + m, targetY);
-                    }
-                } for (int x = 0; x < rw; x++) {
-                    int targetX = rx + x;
-                    int t = bitmap.getPixel(targetX, ry);
-                    int b = bitmap.getPixel(targetX, bEdgeY);
-                    for (int m = 1; m <= margin; m++) {
-                        bitmap.setPixel(t, targetX, ry - m);
-                        bitmap.setPixel(b, targetX, bEdgeY + m);
-                    }
-                } for (int mx = 1; mx <= margin; mx++) {
-                    for (int my = 1; my <= margin; my++) {
-                        bitmap.setPixel(tl, rx - mx, ry - my);
-                        bitmap.setPixel(tr, rEdgeX + mx, ry - my);
-                        bitmap.setPixel(bl, rx - mx, bEdgeY + my);
-                        bitmap.setPixel(br, rEdgeX + mx, bEdgeY + my);
-                    }
-                }
-            }
-        }
-    }
-
-
 }
