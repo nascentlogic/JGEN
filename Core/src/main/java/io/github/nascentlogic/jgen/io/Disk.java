@@ -1216,16 +1216,22 @@ public final class Disk {
      * @param gson {@link Gson} instance used for conversion.
      * @param clazz {@code Class<T>} of the expected object
      * @param json A JSON-formatted string representing an instance of {@code Class<T>}.
-     * @return The expected instance of {@code Class<T>} OR null if the Json-string argument is empty
+     * @return The instance of {@code Class<T>}
      * @throws IOException if the Json-string is not a valid representation for an object of type classOf
+     * or else unable to convert the string to an Object.
      * @throws NullPointerException if any of the arguments are null
      */
     private static <T> T jsonToObject(Gson gson, Class<T> clazz, String json) throws IOException {
         Objects.requireNonNull(clazz,"Class argument is null");
         Objects.requireNonNull(json,"Json-string argument is null");
         Objects.requireNonNull(gson,"Gson object argument is null");
-        try { return gson.fromJson(json,clazz);
-        } catch (JsonSyntaxException e) { throw new IOException(e); }
+        try { T object = gson.fromJson(json,clazz);
+            if (object == null)
+                throw new IOException("unable to deserialize json String: \n" + json);
+            return object;
+        } catch (JsonSyntaxException e) {
+            throw new IOException(e);
+        }
     }
 
     /**
@@ -1314,7 +1320,12 @@ public final class Disk {
             result = 31 * result + name.hashCode();
             result = 31 * result + Long.hashCode(lastModified);
             return result;
-        }
+        } public boolean equals(Object obj) {
+            if (obj == this) return true;
+            if (obj == null || getClass() != obj.getClass()) return false;
+            FileToken other = (FileToken) obj;
+            return path.equals(other.path);
+        } public int hashCode() { return path.hashCode(); }
     }
 
     public static List<FileToken> gameListFiles(String first, String... more) throws IOException {
@@ -1378,18 +1389,114 @@ public final class Disk {
     // Texture Atlas
     // =============================================================================
 
-
-    public static BitmapAtlas gameLoadAtlas(String name, String first, String... more) throws IOException {
+    public static Atlas gameLoadAtlas(String name, String first, String... more) throws IOException {
         Objects.requireNonNull(name);
         if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
-        Path relativePath = toPath(first,more).normalize();
-        Path imagesPath = resolveAndConfine(GAME_ROOT,relativePath);    // images in game root
+        Path relativePath = toPath(first,more).normalize(); // <-- save
+        Path sourcePath = resolveAndConfine(GAME_ROOT,relativePath);    // atlas or images in game root
         Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
-        if (!pathIsDir(imagesPath)) {
+        if (!pathIsDir(sourcePath)) {
+            // even though the atlas may be cached, the game path must still exist. cache is not deleted here
+            throw new IOException("Unable to locate atlas: \"" + sourcePath + "\".");
+        }
+        String atlasBaseName = name + Atlas.FILE_NAME_SUFFIX; // [name]_atlas
+        Path gameInfoPath = sourcePath.resolve(atlasBaseName + ".json");
+
+        if (pathIsFile(gameInfoPath)) {
+            // STATIC LOAD
+            // A name_atlas.json file exist in game directory.
+            // attempt to load info + accociated .png's in the same directory
+            // Cache is not involved here. If load fails, it fails.
+
+            final Bitmap[] bitmaps = new Bitmap[Atlas.ImageType.array.length];
+            Atlas.Info info = loadJson(Atlas.Info.class,gameInfoPath);
+            // just in case, we repopulate relevant info.
+            info.name = name;
+            info.directory = relativePath.toString();
+            info.mondifiedHash = 0;
+
+            // Find accociated bitmaps
+            try (Stream<FileToken> stream = streamDirectory(sourcePath)) {
+                stream.filter(token -> !token.isDirectory() && token.extension.equals(".png"))
+                        .forEach(token -> {
+                            for (Atlas.ImageType type : Atlas.ImageType.array) {
+                                String fileName = atlasBaseName + type.fileSuffix;
+                                if (token.name.equals(fileName)) {
+                                    Path path = Path.of(token.path);
+                                    try { Bitmap bitmap = new Bitmap(load(path,true));
+                                        bitmaps[type.ordinal()] = bitmap;
+                                    } catch (IOException e) {
+                                        Logger.warn(e);
+                                    }
+                                }
+                            }
+                        });
+            } catch (IOException e) { Logger.warn(e); }
+            return new Atlas(info,bitmaps);
+        }
+
+        // ATP
+        // No name_atlas.json found in game directory.
+        // Check in cache. If cache have name_atlas.json, check modifiedHash
+        // if no name_atlas.json present in cache or source directory in modified -> repack
+        // else use atlas png's in cache
+
+
+        final int[] modifiedHash = {17};
+        List<FileToken> sourcePngTokens = listFiles(sourcePath, token -> {
+            if (!token.isDirectory && token.extension.equals(".png")) {
+                if (!token.name.contains(Atlas.FILE_NAME_SUFFIX)) {
+                    modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
+                    return true; }
+            } return false;
+        });
+
+
+        Path cacheInfoPath = sourcePath.resolve(atlasBaseName + ".json");
+
+        if (pathIsFile(cacheInfoPath)) {
+
+            // if cache exist and there is no files in source, delete cache
+
+            Atlas.Info info = loadJson(Atlas.Info.class,cacheInfoPath);
+            // just in case, we repopulate relevant info.
+            info.directory = relativePath.toString();
+            info.name = name;
+
+
+
+            // name_atlas.json found in cache.
+
+
+        }
+
+
+
+
+
+
+
+
+        // List<Atlas.SorurceImage> sourceImages;
+
+        // No cache
+
+
+
+        return null;
+    }
+
+    public static BitmapAtlas gameLoadAtlasOld(String name, String first, String... more) throws IOException {
+        Objects.requireNonNull(name);
+        if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
+        Path relativePath = toPath(first,more).normalize(); // <-- save
+        Path sourcesPath = resolveAndConfine(GAME_ROOT,relativePath);    // images in game root
+        Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
+        if (!pathIsDir(sourcesPath)) {
             // even though the atlas may be cached,
             // the images path must exist
             // cache is not deleted here
-            throw new IOException("Unable to locate atlas: \"" + imagesPath + "\".");
+            throw new IOException("Unable to locate atlas: \"" + sourcesPath + "\".");
         }
 
         final String atlasFileName = name + BitmapAtlas.FILE_SUFFIX;
@@ -1407,7 +1514,7 @@ public final class Disk {
         }
 
         final int[] modifiedHash = {17};
-        List<FileToken> imageTokens = listFiles(imagesPath, token -> {
+        List<FileToken> imageTokens = listFiles(sourcesPath, token -> {
             if (!token.isDirectory && token.extension.equals(".png")) {
                 modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
                 return true;
@@ -1434,7 +1541,7 @@ public final class Disk {
 
         if (imageTokens.isEmpty())
             throw new IOException("Unable to generate atlas: \""
-                    + imagesPath + "\". No source files.");
+                    + sourcesPath + "\". No source files.");
 
 
         List<Bitmap> bitmaps    = new ArrayList<>(imageTokens.size());

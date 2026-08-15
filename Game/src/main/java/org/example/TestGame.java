@@ -39,7 +39,7 @@ public class TestGame implements Game {
 
     public void start() throws Exception {
         batch = new SpriteRenderer(Jgen.get().window().gameResolution(new Vector2i()), 256);
-        BitmapAtlas atlas = Disk.gameLoadAtlas("objects","assets","atlas");
+        BitmapAtlas atlas = Disk.gameLoadAtlasOld("objects","assets","atlas");
         Texture atlasTexture = atlas.bitmap().toTexture(false,true);
         Texture[] normalsHeight = ShaderProgram.internalPrograms().generateNormalsHeight(
                 atlasTexture,0,0.01f,32,1.5f,0.7f,1.1f,0.5f,2.0f);

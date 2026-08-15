@@ -1,7 +1,7 @@
 package io.github.nascentlogic.jgen;
 
 import io.github.nascentlogic.jgen.utils.IntQueue;
-import io.github.nascentlogic.jgen.utils.TextProcessor;
+import io.github.nascentlogic.jgen.utils.text.TextProcessor;
 
 import java.util.Objects;
 

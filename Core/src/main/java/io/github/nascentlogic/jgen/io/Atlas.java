@@ -11,9 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static org.lwjgl.opengl.GL11.GL_NEAREST;
-import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
-
 
 /**
  * F.Dahl, 7/25/2026
@@ -21,7 +18,7 @@ import static org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE;
 public class Atlas implements Disposable {
 
     public static final int PACK_MARGIN = 2;
-    public static final String FILE_SUFFIX = "_atlas";
+    public static final String FILE_NAME_SUFFIX = "_atlas";
 
     public enum ImageType {
         COLOR(""),
@@ -67,36 +64,13 @@ public class Atlas implements Disposable {
 
     public static final class Info {
         public String name = "";
-        public String directory = "";
-        public String cache = "";
+        public String directory = ""; // relative dir path
         public int mondifiedHash = 0;
         public int margin = PACK_MARGIN;
-        public List<Entry> entries = new ArrayList<>();
+        public List<Entry> entries = List.of();
         public Info() { /* GSON */ }
     }
 
-    public static class TextureGen {
-        /** Alloacate mipmaps. 0 = false */
-        public int texMipmap = 0;
-        /** Texture filter */
-        public int texFilter = GL_NEAREST;
-        /** Texture wrap  */
-        public int texeWrap = GL_CLAMP_TO_EDGE;
-        /** 0 = Euclidean, 1 = Manhattan, 2 = Chebyshev */
-        public int distFunc = 0;
-        public int maxDist = 38;
-        /** */
-        public float heightExp = 0.55f;
-        /** */
-        public float luminanceInfluence = 1.0f;
-        /** */
-        public float luminanceExp = 0.45f;
-        /** Luminance influence on height output */
-        public float heightDetail = 0.55f;
-        /** Scale strength of normal output.*/
-        public float normalScalar = 1.15f;
-
-    }
 
     private final Bitmap[] bitmaps = new Bitmap[ImageType.array.length];
     private final Info info;
