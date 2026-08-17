@@ -11,6 +11,10 @@ public class ImmutableText implements UnmanagedText {
 
     final byte[] array;
 
+    // =============================================================================
+    // Constructors
+    // =============================================================================
+
     public ImmutableText(CharSequence str) {
         this.array = new byte[Text.normalizedLength(str)];
         Text.normalize(str, array, 0);
@@ -24,14 +28,22 @@ public class ImmutableText implements UnmanagedText {
         this.array = Objects.requireNonNull(array);
     }
 
+    // =============================================================================
+    // Text
+    // =============================================================================
+
+    @Override
+    public byte get(int index) {
+        return array[index];
+    }
+
+    // =============================================================================
+    // CharSequence
+    // =============================================================================
+
     @Override
     public int length() {
         return array.length;
-    }
-
-    @Override
-    public char charAt(int index) {
-        return (char) array[index];
     }
 
     @Override
@@ -44,5 +56,21 @@ public class ImmutableText implements UnmanagedText {
     @Override
     public String toString() {
         return new String(array, StandardCharsets.US_ASCII);
+    }
+
+    // =============================================================================
+    // Object
+    // =============================================================================
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof ImmutableText other)) return false;
+        return java.util.Arrays.equals(this.array, other.array);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Arrays.hashCode(array);
     }
 }

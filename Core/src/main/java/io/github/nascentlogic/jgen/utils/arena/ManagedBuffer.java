@@ -33,6 +33,7 @@ public abstract class ManagedBuffer implements Disposable {
      */
     protected void onFree() { /* no-op */ }
 
+    // todo: Might remove this
     /**
      * Creates a {@link ByteBuffer} slice representing this buffer's current memory block. <p>
      * The returned buffer's position is 0, and its limit and capacity equal this buffer's allocated capacity.

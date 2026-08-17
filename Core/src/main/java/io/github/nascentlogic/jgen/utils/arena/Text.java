@@ -7,12 +7,253 @@ import java.util.Objects;
  */
 public interface Text extends CharSequence {
 
-    byte TAB = 0x09;             // '\t'
-    byte LINE_FEED = 0x0A;       // '\n'
-    byte CARRIAGE_RETURN = 0x0D; // '\r'
+    // Text will be populated with methods needed for rendering / Tokenizing etc.
 
+    /**
+     * Get raw byte without char casting OR bounds check.
+     * @param index index of character.
+     * @return valid printable ascii character.
+     */
+    byte get(int index);
+
+    @Override
+    default char charAt(int index) {
+        // no masking (& 0x7F). array values normalized by contract.
+        return (char) get(index);
+    }
+
+    // =============================================================================
+    // INDEX OF (Forward Search)
+    // =============================================================================
+
+    /**
+     * Returns the index within this text of the first occurrence of the specified ASCII character.
+     * @param c the ASCII character (byte value) to search for
+     * @return the index of the first occurrence, or -1 if character does not occur
+     */
+    default int indexOf(byte c) {
+        return indexOf(c, 0);
+    }
+
+    /**
+     * Returns the index within this text of the first occurrence of the specified ASCII character,
+     * starting the search at the specified index.
+     * @param c         the ASCII character (byte value) to search for
+     * @param fromIndex the index to start the search from
+     * @return the index of the first occurrence at or after {@code fromIndex},
+     *         or -1 if character does not occur
+     */
+    default int indexOf(byte c, int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (get(i) == c) return i;
+        } return -1;
+    }
+
+    /**
+     * Returns the index within this text of the first occurrence of the specified substring.
+     * @param str the sequence to search for
+     * @return the index of the first occurrence, or -1 if the sequence is not found
+     */
+    default int indexOf(CharSequence str) {
+        return indexOf(str, 0);
+    }
+
+    /**
+     * Returns the index within this text of the first occurrence of the specified substring,
+     * starting at the specified index.
+     * @param str       the sequence to search for
+     * @param fromIndex the index to start the search from
+     * @return the index of the first occurrence at or after {@code fromIndex},
+     *         or -1 if the sequence is not found
+     */
+    @SuppressWarnings("all")
+    default int indexOf(CharSequence str, int fromIndex) {
+        Objects.requireNonNull(str, "str cannot be null");
+        int strLen = str.length();
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        // String.indexOf behavior for empty target
+        if (strLen == 0) return Math.min(fromIndex, len);
+        if (fromIndex >= len || strLen > len - fromIndex) return -1;
+        char firstChar = str.charAt(0);
+        int max = len - strLen;
+        for (int i = fromIndex; i <= max; i++) {
+            // Look for first character
+            if (charAt(i) != firstChar) {
+                while (++i <= max && charAt(i) != firstChar);
+            } // Found first character, now check the rest
+            if (i <= max) {
+                int j = i + 1;
+                int end = j + strLen - 1;
+                for (int k = 1; j < end && charAt(j) == str.charAt(k); j++, k++);
+                if (j == end) return i; // Full match found
+            }
+        }
+        return -1;
+    }
+
+    // =============================================================================
+    // LAST INDEX OF (Backward Search)
+    // =============================================================================
+
+    /**
+     * Returns the index within this text of the last occurrence of the specified ASCII character.
+     * @param c the ASCII character (byte value) to search for
+     * @return the index of the last occurrence, or -1 if character does not occur
+     */
+    default int lastIndexOf(byte c) {
+        return lastIndexOf(c, length() - 1);
+    }
+
+    /**
+     * Returns the index within this text of the last occurrence of the specified ASCII character,
+     * searching backward starting at the specified index.
+     * @param c         the ASCII character (byte value) to search for
+     * @param fromIndex the index to start the search backward from
+     * @return the index of the last occurrence at or before {@code fromIndex},
+     *         or -1 if character does not occur
+     */
+    default int lastIndexOf(byte c, int fromIndex) {
+        int len = length();
+        if (fromIndex >= len) fromIndex = len - 1;
+        for (int i = fromIndex; i >= 0; i--) {
+            if (get(i) == c) return i;
+        } return -1;
+    }
+
+    /**
+     * Returns the index within this text of the last occurrence of the specified substring.
+     * @param str the sequence to search for
+     * @return the index of the last occurrence, or -1 if the sequence is not found
+     */
+    default int lastIndexOf(CharSequence str) {
+        return lastIndexOf(str, length());
+    }
+
+    /**
+     * Returns the index within this text of the last occurrence of the specified substring,
+     * searching backward starting at the specified index.
+     * @param str       the sequence to search for
+     * @param fromIndex the index to start the search backward from
+     * @return the index of the last occurrence at or before {@code fromIndex},
+     *         or -1 if the sequence is not found
+     */
+    @SuppressWarnings("all")
+    default int lastIndexOf(CharSequence str, int fromIndex) {
+        Objects.requireNonNull(str, "str cannot be null");
+        int strLen = str.length();
+        int len = length();
+        if (fromIndex > len - strLen) fromIndex = len - strLen;
+        if (fromIndex < 0) return -1;
+        // String.lastIndexOf behavior for empty target
+        if (strLen == 0) return fromIndex;
+        char lastChar = str.charAt(strLen - 1);
+        int min = strLen - 1;
+        int i = fromIndex + strLen - 1;
+        for (; i >= min; i--) {
+            // Look for last character
+            if (charAt(i) != lastChar) {
+                while (--i >= min && charAt(i) != lastChar);
+            } // Found last character, check the rest backward
+            if (i >= min) {
+                int start = i - strLen + 1;
+                int j = i - 1;
+                int k = strLen - 2;
+                while (j >= start && charAt(j) == str.charAt(k)) {
+                    j--;
+                    k--;
+                } if (j < start) return start; // Full match found
+            }
+        }
+        return -1;
+    }
+
+    // =============================================================================
+    // PREFIX / SUFFIX CHECKS
+    // =============================================================================
+
+    /**
+     * Tests if this text starts with the specified ASCII character.
+     * @param c the ASCII character (byte value) to check
+     * @return {@code true} if the character sequence represented by the argument is a prefix
+     */
+    default boolean startsWith(byte c) {
+        return length() > 0 && get(0) == c;
+    }
+
+    /**
+     * Tests if this text starts with the specified prefix.
+     * @param prefix the prefix to check
+     * @return {@code true} if the sequence represented by the argument is a prefix
+     */
+    default boolean startsWith(CharSequence prefix) {
+        return startsWith(prefix, 0);
+    }
+
+    /**
+     * Tests if the substring of this text beginning at the specified index
+     * starts with the specified prefix.
+     * @param prefix the prefix to check
+     * @param offset where to begin searching in this text
+     * @return {@code true} if the sequence represented by the argument is a prefix at offset
+     */
+    default boolean startsWith(CharSequence prefix, int offset) {
+        Objects.requireNonNull(prefix, "prefix cannot be null");
+        int prefixLen = prefix.length();
+        int len = length();
+        // Bounds check matching String.startsWith
+        if (offset < 0 || offset > len - prefixLen) return false;
+        for (int i = 0; i < prefixLen; i++) {
+            if (charAt(offset + i) != prefix.charAt(i)) return false;
+        } return true;
+    }
+
+    /**
+     * Tests if this text ends with the specified ASCII character.
+     * @param c the ASCII character (byte value) to check
+     * @return {@code true} if the character sequence represented by the argument is a suffix
+     */
+    default boolean endsWith(byte c) {
+        int len = length();
+        return len > 0 && get(len - 1) == c;
+    }
+
+    /**
+     * Tests if this text ends with the specified suffix.
+     * @param suffix the suffix to check
+     * @return {@code true} if the sequence represented by the argument is a suffix
+     */
+    default boolean endsWith(CharSequence suffix) {
+        return startsWith(suffix, length() - suffix.length());
+    }
+
+    // =============================================================================
+    // Utility
+    // =============================================================================
+
+    // Printable ASCII & Normal Control Constants
+    byte TAB             = 0x09; // '\t' (9)
+    byte LINE_FEED       = 0x0A; // '\n' (10)
+    byte CARRIAGE_RETURN = 0x0D; // '\r' (13)
+    byte SPACE           = 0x20; // ' '  (32)
+    byte TILDE           = 0x7E; // '~'  (126)
+
+    /**
+     * Checks whether a character code point represents a valid normalized
+     * character in our internal ASCII text format.
+     *
+     * Valid characters include:
+     * - Tab ('\t', 0x09)
+     * - Line Feed ('\n', 0x0A)
+     * - Printable ASCII range (' ' through '~', 32 to 126)
+     *
+     * @param c character code point to check
+     * @return true if valid internal format; false otherwise
+     */
     static boolean isValidInternalFormat(int c) {
-        return (c >= 32 && c < 127) || c == LINE_FEED || c == TAB;
+        return (c >= SPACE && c <= TILDE) || c == LINE_FEED || c == TAB;
     }
 
     static int normalizedLength(CharSequence src) { return normalizedLength(src,0,src.length()); }
@@ -47,4 +288,39 @@ public interface Text extends CharSequence {
                 dst[dstFrom + count++] = b;
         } return count;
     }
+
+    static boolean contentEquals(CharSequence a, CharSequence b) {
+        if (a == b) return true; // Handles both being null or both pointing to the same instance
+        if (a == null || b == null) return false;
+        int len = a.length();
+        if (len != b.length()) return false;
+        for (int i = 0; i < len; i++) {
+            if (a.charAt(i) != b.charAt(i)) return false;
+        } return true;
+    }
+
+    /**
+     * Checks if two half-open 1D ranges [start1, end1) and [start2, end2) overlap.
+     * @param start1 inclusive start of first range
+     * @param end1   exclusive end of first range
+     * @param start2 inclusive start of second range
+     * @param end2   exclusive end of second range
+     * @return true if the ranges intersect; false otherwise
+     */
+    static boolean rangeOverlap(int start1, int end1, int start2, int end2) {
+        return start1 < end2 && start2 < end1;
+    }
+
+    /**
+     * Checks if two 1D regions defined by (pos, len) overlap.
+     * @param pos1 starting position of first region
+     * @param len1 length of first region
+     * @param pos2 starting position of second region
+     * @param len2 length of second region
+     * @return true if the regions intersect; false otherwise
+     */
+    static boolean regionOverlap(int pos1, int len1, int pos2, int len2) {
+        return rangeOverlap(pos1, pos1 + len1, pos2, pos2 + len2);
+    }
+
 }

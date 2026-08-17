@@ -12,6 +12,10 @@ public class TextView implements UnmanagedText {
     final int pos;
     final int len;
 
+    // =============================================================================
+    // Constructors
+    // =============================================================================
+
     /**
      * Package private initializer.
      * @param array Normalized ascii array.
@@ -20,6 +24,12 @@ public class TextView implements UnmanagedText {
         this(array, 0, array.length);
     }
 
+    /**
+     * Package private initializer.
+     * @param array Normalized ascii array.
+     * @param pos positional offset.
+     * @param len content length.
+     */
     TextView(byte[] array, int pos, int len) {
         Objects.checkFromIndexSize(pos, len, array.length);
         this.array = array;
@@ -27,16 +37,22 @@ public class TextView implements UnmanagedText {
         this.len = len;
     }
 
+    // =============================================================================
+    // Text
+    // =============================================================================
+
+    @Override
+    public byte get(int index) {
+        return array[pos + index];
+    }
+
+    // =============================================================================
+    // CharSequence
+    // =============================================================================
+
     @Override
     public int length() {
         return len;
-    }
-
-    @Override
-    public char charAt(int index) {
-        Objects.checkIndex(index, len);
-        // no masking (& 0x7F). array values normalized by contract.
-        return (char) array[pos + index];
     }
 
     @Override
@@ -50,4 +66,5 @@ public class TextView implements UnmanagedText {
     public String toString() {
         return new String(array, pos, len, StandardCharsets.US_ASCII);
     }
+
 }
