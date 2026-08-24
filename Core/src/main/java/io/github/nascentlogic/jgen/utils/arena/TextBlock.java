@@ -28,6 +28,34 @@ public class TextBlock extends ManagedText {
         len = Text.normalize(str,memory(),arenaOffset());
     }
 
+    public TextBlock(byte[] array) {
+        Objects.requireNonNull(array);
+        allocate(array.length);
+        len = Text.normalize(array,memory(),arenaOffset());
+    }
+
+    // =============================================================================
+    // TextBlock Exclusive
+    // =============================================================================
+
+    /**
+     * Converts {@code this} into a {@link TextBuffer}, essentially transfering
+     * the arena memory block from {@code this} onto the TextBuffer.
+     * Leaving {@code this} effectively disposed.<p>
+     * {@code gapStart} is set to {@code lenght()} and
+     * {@code gapEnd} is set to {@code capacity()}.<p>
+     * @return {@code this} as a {@code TextBuffer}.
+     * @throws IllegalStateException If already disposed / freed
+     */
+    public TextBuffer toTextBuffer() {
+        if (isDisposed()) throw new IllegalStateException("TextBlock is disposed");
+        TextBuffer buffer = new TextBuffer(arenaOffset,blockSize,len);
+        blockSize = 0; // signals to the outside that this is disposed
+        arenaOffset = 0; // does not matter
+        len = 0;
+        return buffer;
+    }
+
     // =============================================================================
     // ManagedText
     // =============================================================================
@@ -53,10 +81,10 @@ public class TextBlock extends ManagedText {
             throw new BufferOverflowException();
         } // Allocate temporary buffer ONLY if view overlaps the exact bytes we will overwrite
         if (str instanceof TextView view && isOverlappingWriteTarget(view, strLen)) {
-            byte[] temp = new byte[strLen];
-            int tempLen = Text.normalize(str, temp, 0);
-            uncheckedWrite(temp, 0, 0, tempLen);
-            this.len = tempLen;
+            byte[] tmp = new byte[strLen];
+            int tmpLen = Text.normalize(str, tmp, 0);
+            uncheckedWrite(tmp, 0, 0, tmpLen);
+            this.len = tmpLen;
         } else { // Direct zero-allocation pass
             this.len = Text.normalize(str, memory(), arenaOffset());
         } return len;
@@ -86,18 +114,12 @@ public class TextBlock extends ManagedText {
 
     @Override
     protected void onBlockChange(int oldPos, int oldSize, int newPos, int newSize) {
-        throw new UnsupportedOperationException("StaticText blocks cannot be resized or moved");
+        // Sanity check. Should never occur.
+        throw new UnsupportedOperationException("Text blocks are fixed size and cannot be resized or moved");
     }
 
     @Override
     protected void onFree() { len = 0; } // crucial to reflect that the buffer is empty
-
-    @Override
-    public ByteBuffer asByteBuffer() {
-        if (isDisposed()) throw new IllegalStateException("Buffer is disposed");
-        return ByteBuffer.wrap(memory(), arenaOffset(), len)
-                .slice().asReadOnlyBuffer();
-    }
 
     // =============================================================================
     // Text
@@ -106,6 +128,12 @@ public class TextBlock extends ManagedText {
     @Override
     public byte get(int index) {
         return getByte(index);
+    }
+
+    @Override
+    public ByteBuffer readBuffer() {
+        if (isDisposed()) throw new IllegalStateException("TextBlock is disposed");
+        return ByteBuffer.wrap(memory()).slice(arenaOffset(), len).asReadOnlyBuffer();
     }
 
     // =============================================================================

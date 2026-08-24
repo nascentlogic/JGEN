@@ -149,6 +149,7 @@ public class ShaderProgram implements Disposable {
     public static void deleteAllPrograms() {
         Disposable.free(internalPrograms);
         PROGRAM_MAP.values().forEach(program -> {
+            Logger.debug("Deleting shader: {}",program.name);
             glDeleteProgram(program.handle);
             program.handle = GL_NONE;
         }); PROGRAM_MAP.clear();

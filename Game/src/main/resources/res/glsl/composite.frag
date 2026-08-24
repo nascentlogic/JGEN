@@ -15,6 +15,6 @@ vec3 linearToSRGB(vec3 c) {
 void main() {
     vec4 bg = texture(uTextureBG, vTexCoord);
     vec4 fg = texture(uTextureFG, vTexCoord);
-    vec3 compositeRGB = bg.rgb * (1.0 - fg.a) + fg.rgb;
+    vec3 compositeRGB = bg.rgb * (1.0 - fg.a) + fg.rgb; // one, on minus source alpha
     fColor = vec4(linearToSRGB(compositeRGB), 1.0);
 }

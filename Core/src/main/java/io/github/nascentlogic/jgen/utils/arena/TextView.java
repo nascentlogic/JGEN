@@ -1,12 +1,13 @@
 package io.github.nascentlogic.jgen.utils.arena;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
  * F.Dahl, 8/15/2026
  */
-public class TextView implements UnmanagedText {
+public final class TextView implements UnmanagedText {
 
     final byte[] array;
     final int pos;
@@ -44,6 +45,11 @@ public class TextView implements UnmanagedText {
     @Override
     public byte get(int index) {
         return array[pos + index];
+    }
+
+    @Override
+    public ByteBuffer readBuffer() {
+        return ByteBuffer.wrap(array).slice(pos, len).asReadOnlyBuffer();
     }
 
     // =============================================================================

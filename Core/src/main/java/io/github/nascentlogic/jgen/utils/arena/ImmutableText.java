@@ -1,6 +1,7 @@
 package io.github.nascentlogic.jgen.utils.arena;
 
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
@@ -35,6 +36,11 @@ public class ImmutableText implements UnmanagedText {
     @Override
     public byte get(int index) {
         return array[index];
+    }
+
+    @Override
+    public ByteBuffer readBuffer() {
+        return ByteBuffer.wrap(array).asReadOnlyBuffer();
     }
 
     // =============================================================================

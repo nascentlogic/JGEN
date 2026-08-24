@@ -1,6 +1,7 @@
 package io.github.nascentlogic.jgen;
 
 import io.github.nascentlogic.jgen.gfx.ShaderProgram;
+import io.github.nascentlogic.jgen.gfx.Texture;
 import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.lwjgl.Version;
@@ -132,7 +133,10 @@ public final class Jgen {
             } catch (Exception e) {
                 Logger.error(e);
             } finally {
+                Logger.info("DELETING SHADERS");
                 ShaderProgram.deleteAllPrograms();
+                Logger.info("Texture Memory Peak:   {}",JgenUtils.formatBytes(Texture.memoryUsed()));
+                Logger.info("Texture Memory Leaked: {}",JgenUtils.formatBytes(Texture.memoryUsed()));
                 Logger.info("CLOSING WINDOW");
                 window.terminate();
             }

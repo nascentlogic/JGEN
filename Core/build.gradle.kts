@@ -21,7 +21,7 @@ dependencies {
     api(libs.lwjgl.glfw)
     api(libs.lwjgl.opengl)
     api(libs.lwjgl.stb)
-
+    api(libs.lwjgl.msdfgen)
     api(libs.joml)
     api(libs.joml.primitives)
     api(libs.tinylog.api)
@@ -34,5 +34,6 @@ dependencies {
         runtimeOnly("org.lwjgl:lwjgl-glfw::$platform")
         runtimeOnly("org.lwjgl:lwjgl-opengl::$platform")
         runtimeOnly("org.lwjgl:lwjgl-stb::$platform")
+        runtimeOnly("org.lwjgl:lwjgl-msdfgen::$platform")
     }
 }

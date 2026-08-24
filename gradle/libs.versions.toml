@@ -28,6 +28,7 @@ lwjgl = { group = "org.lwjgl", name = "lwjgl" }
 lwjgl-glfw = { group = "org.lwjgl", name = "lwjgl-glfw" }
 lwjgl-opengl = { group = "org.lwjgl", name = "lwjgl-opengl" }
 lwjgl-stb = { group = "org.lwjgl", name = "lwjgl-stb" }
+lwjgl-msdfgen = { group = "org.lwjgl", name = "lwjgl-msdfgen" }
 # Utilities
 joml = { group = "org.joml", name = "joml", version.ref = "joml" }
 joml-primitives = { group = "org.joml", name = "joml-primitives", version.ref = "joml-primitives" }

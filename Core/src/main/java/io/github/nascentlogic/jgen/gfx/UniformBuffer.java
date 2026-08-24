@@ -15,21 +15,26 @@ public class UniformBuffer implements Disposable {
     private final int size;
     private boolean disposed;
 
-    /** Constructor leaves this buffer bound as the active GL_UNIFORM_BUFFER target. */
+    /**
+     * Constructor leaves this buffer bound as the active GL_UNIFORM_BUFFER target.
+     * @param size bytes.
+     * @param dynamic dynamic / static - draw
+     */
     public UniformBuffer(int size, boolean dynamic) {
         this.handle = Buffers.generateUBO(dynamic,size);
         this.size = size;
     }
 
+    /** @return size of buffer in bytes */
     public int size() { return size; }
     public int handle() { return handle; }
     public boolean isDisposed() { return disposed; }
 
-    /** Bind the UniformBuffer to the correct binding point (slot), as configured in the Shader
+    /** Bind the UniformBuffer to the correct binding point (index), as configured in the Shader
      * @see Buffers#bindBufferBase(int, int, int)  */
-    public void bindToSlot(int slot) {
+    public void bindBufferBase(int index) {
         if (disposed) throw new IllegalStateException("Cannot bind a disposed Uniform Buffer");
-        Buffers.bindBufferBase(GL_UNIFORM_BUFFER, slot, handle);
+        Buffers.bindBufferBase(GL_UNIFORM_BUFFER, index, handle);
     }
 
     /** @see #upload(int, Buffer) */
@@ -52,7 +57,7 @@ public class UniformBuffer implements Disposable {
         disposed = true;
     }
 
-    public static void unbindSlot(int slot) {
-        Buffers.bindBufferBase(GL_UNIFORM_BUFFER, slot, 0);
+    public static void bindBufferBaseNone(int index) {
+        Buffers.bindBufferBase(GL_UNIFORM_BUFFER, index, 0);
     }
 }

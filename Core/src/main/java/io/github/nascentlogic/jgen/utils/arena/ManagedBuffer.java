@@ -9,9 +9,8 @@ import java.nio.ByteBuffer;
  */
 public abstract class ManagedBuffer implements Disposable {
 
-    private int arenaOffset;    // arena start index
-    private int blockSize;      // allocated memory / buffer capacity  (0 = disposed)
-
+    int arenaOffset;    // arena start index
+    int blockSize;      // allocated memory / buffer capacity  (0 = disposed)
 
     /**
      * Hook invoked after the arena assigns a new block to this buffer during reallocation or growth. <p>
@@ -33,17 +32,15 @@ public abstract class ManagedBuffer implements Disposable {
      */
     protected void onFree() { /* no-op */ }
 
-    // todo: Might remove this
     /**
-     * Creates a {@link ByteBuffer} slice representing this buffer's current memory block. <p>
-     * The returned buffer's position is 0, and its limit and capacity equal this buffer's allocated capacity.
-     * Subclasses (such as gap buffers) may override this method to expose only active data ranges.
-     * @return a {@link ByteBuffer} view of the buffer's memory
+     * Creates a {@link ByteBuffer} slice representing this buffer's current memory block.<p>
+     * The returned buffer's position is 0, and its limit and capacity equal the buffers ManagedBuffer's capacity.<p>
+     * @return a {@link ByteBuffer} read only view of the buffer's memory
      * @throws IllegalStateException if this buffer is disposed
      */
-    protected ByteBuffer asByteBuffer() {
+    public final ByteBuffer memoryBlockView() {
         if (isDisposed()) throw new IllegalStateException("Buffer is disposed");
-        return ByteBuffer.wrap(memory(), arenaOffset, blockSize())
+        return ByteBuffer.wrap(memory(), arenaOffset, blockSize)
                 .slice().asReadOnlyBuffer();
     }
 

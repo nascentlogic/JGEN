@@ -23,12 +23,12 @@ import static org.lwjgl.system.MemoryStack.stackPush;
  */
 public class Bitmap implements Disposable {
 
-
     private ByteBuffer pixels;
     private final int width;
     private final int height;
     private final int channels;
     private boolean stbAllocated;
+    private boolean isDisposed;
 
     public Bitmap(int width, int height, int channels) {
         assertValidDimensions(width, height, channels);
@@ -211,15 +211,23 @@ public class Bitmap implements Disposable {
             default -> throw new IllegalStateException("Channels > 4");
         }; texture.allocate(format,mipmap);
         texture.upload(pixels);
-        texture.clampToBorder();
+        texture.clampToEdge();
         texture.filterLinear();
         return texture;
     }
 
+    public boolean isDisposed() {
+        return isDisposed;
+    }
+
     public void free() {
-        if (stbAllocated) {
-            stbi_image_free(pixels);
-        } else MemoryUtil.memFree(pixels);
+        if (!isDisposed) {
+            if (stbAllocated) {
+                stbi_image_free(pixels);
+            } else MemoryUtil.memFree(pixels);
+            isDisposed = true;
+        }
+
     }
 
     private static void assertValidDimensions(int width, int height, int channels) {

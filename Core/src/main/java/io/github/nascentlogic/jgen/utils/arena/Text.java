@@ -1,13 +1,31 @@
 package io.github.nascentlogic.jgen.utils.arena;
 
+import java.nio.ByteBuffer;
 import java.util.Objects;
 
 /**
  * F.Dahl, 8/15/2026
  */
-public interface Text extends CharSequence {
+public interface Text extends CharSequence, Comparable<CharSequence> {
 
-    // Text will be populated with methods needed for rendering / Tokenizing etc.
+    /** Singleton 0 length, UmmanagedText. */
+    Text EMPTY_TEXT = EmptyText.INSTANCE;
+    /** 0 length, Read-Only ByteBuffer. */
+    ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0).asReadOnlyBuffer();
+
+    // =============================================================================
+    // CharSequence
+    // =============================================================================
+
+    @Override
+    default char charAt(int index) {
+        // no masking (& 0x7F). array values normalized by contract.
+        return (char) get(index);
+    }
+
+    // =============================================================================
+    // Get
+    // =============================================================================
 
     /**
      * Get raw byte without char casting OR bounds check.
@@ -16,11 +34,16 @@ public interface Text extends CharSequence {
      */
     byte get(int index);
 
-    @Override
-    default char charAt(int index) {
-        // no masking (& 0x7F). array values normalized by contract.
-        return (char) get(index);
-    }
+
+    /**
+     * Creates a {@link ByteBuffer} slice representing of this buffer's current content.<p>
+     * Views are short lived objects, as modifying the Text may alter the View. Beneficial for saving text to file.<p>
+     * The returned buffer's position is 0, and its limit and capacity equal the buffers length. <p>
+     * @return a read only view of the buffer content.
+     * @throws IllegalStateException if this buffer is a disposed {@link ManagedBuffer}.
+     */
+    ByteBuffer readBuffer();
+
 
     // =============================================================================
     // INDEX OF (Forward Search)
@@ -230,7 +253,57 @@ public interface Text extends CharSequence {
     }
 
     // =============================================================================
-    // Utility
+    // EQUALITY and COMPARISON
+    // =============================================================================
+
+    /**
+     * @see String#contentEquals(CharSequence)
+     */
+    default boolean contentEquals(CharSequence str) {
+        if (str == this) return true;
+        if (str == null) return false;
+        int strLen = str.length();
+        int len = length();
+        if (strLen != len) return false;
+        if (str instanceof Text text) {
+            for (int i = 0; i < len; i++)
+                if (text.get(i) != get(i)) return false;
+        } else for (int i = 0; i < len; i++) {
+            if (str.charAt(i) != charAt(i)) return false;
+        } return true;
+    }
+
+    /**
+     * Compares this {@code Text} instance with another {@code CharSequence} lexicographically.
+     * @param other the sequence to be compared
+     * @return a negative integer, zero, or a positive integer as this text
+     *         is lexicographically less than, equal to, or greater than the specified sequence.
+     */
+    @Override
+    default int compareTo(CharSequence other) {
+        Objects.requireNonNull(other, "other sequence cannot be null");
+        if (other == this) return 0;
+        int len1 = length();
+        int len2 = other.length();
+        int lim = Math.min(len1, len2);
+        // Fast path for comparing two Text instances (direct byte arithmetic)
+        if (other instanceof Text text) {
+            for (int i = 0; i < lim; i++) {
+                byte b1 = get(i);
+                byte b2 = text.get(i);
+                // Safe because b1, b2 are guaranteed > 0 by contract
+                if (b1 != b2) return b1 - b2;
+            }
+        } else for (int i = 0; i < lim; i++) {
+            char c1 = charAt(i);
+            char c2 = other.charAt(i);
+            if (c1 != c2) return c1 - c2;
+        } return len1 - len2;
+    }
+
+
+    // =============================================================================
+    // Static Utility
     // =============================================================================
 
     // Printable ASCII & Normal Control Constants
@@ -258,7 +331,10 @@ public interface Text extends CharSequence {
 
     static int normalizedLength(CharSequence src) { return normalizedLength(src,0,src.length()); }
     static int normalizedLength(CharSequence src, int srcFrom, int srcTo) {
-        Objects.checkFromToIndex(srcFrom, srcTo, src.length());
+        int srcLen = src.length();
+        Objects.checkFromToIndex(srcFrom, srcTo, srcLen);
+        if (srcFrom == srcTo) return 0;
+        if (src instanceof Text) return srcTo - srcFrom;
         int count = 0;
         for (int i = srcFrom; i < srcTo; i++) {
             if (isValidInternalFormat(src.charAt(i))) count++;
@@ -267,10 +343,14 @@ public interface Text extends CharSequence {
 
     static int normalize(CharSequence src, byte[] dst, int dstFrom) { return normalize(src, 0, src.length(), dst, dstFrom); }
     static int normalize(CharSequence src, int srcFrom, int srcTo, byte[] dst, int dstFrom) {
-        Objects.checkFromToIndex(srcFrom, srcTo, src.length());
+        int srcLen = src.length();
+        Objects.checkFromToIndex(srcFrom, srcTo, srcLen);
         if (srcFrom == srcTo) return 0;
         int count = 0;
-        for (int i = srcFrom; i < srcTo; i++) {
+        if (src instanceof Text text) {
+            for (int i = srcFrom; i < srcTo; i++)
+                dst[dstFrom + count++] = text.get(i);
+        } else for (int i = srcFrom; i < srcTo; i++) {
             char c = src.charAt(i);
             if (isValidInternalFormat(c))
                 dst[dstFrom + count++] = (byte) c;
@@ -287,16 +367,6 @@ public interface Text extends CharSequence {
             if (isValidInternalFormat(b))
                 dst[dstFrom + count++] = b;
         } return count;
-    }
-
-    static boolean contentEquals(CharSequence a, CharSequence b) {
-        if (a == b) return true; // Handles both being null or both pointing to the same instance
-        if (a == null || b == null) return false;
-        int len = a.length();
-        if (len != b.length()) return false;
-        for (int i = 0; i < len; i++) {
-            if (a.charAt(i) != b.charAt(i)) return false;
-        } return true;
     }
 
     /**
@@ -321,6 +391,21 @@ public interface Text extends CharSequence {
      */
     static boolean regionOverlap(int pos1, int len1, int pos2, int len2) {
         return rangeOverlap(pos1, pos1 + len1, pos2, pos2 + len2);
+    }
+
+    // =============================================================================
+    // Classes
+    // =============================================================================
+
+    final class EmptyText implements UnmanagedText {
+        private static final EmptyText INSTANCE = new EmptyText();
+        private EmptyText() { /* Singleton */ }
+        public int length() { return 0; }
+        public byte get(int index) { throw new IndexOutOfBoundsException("Index: " + index + ", Length: 0"); }
+        public ByteBuffer readBuffer() { return EMPTY_BUFFER;}
+        public CharSequence subSequence(int start, int end) {
+            Objects.checkFromToIndex(start, end, 0); return this;
+        } public String toString() { return ""; }
     }
 
 }

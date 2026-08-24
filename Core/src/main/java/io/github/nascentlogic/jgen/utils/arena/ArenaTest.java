@@ -8,7 +8,7 @@ import java.util.*;
 /**
  * F.Dahl, 8/14/2026
  */
-public class ArenaTest {
+class ArenaTest {
 
     private static final Random random = new Random();
     private static final List<TestBuffer> buffers = new ArrayList<>(1024);
@@ -208,12 +208,12 @@ public class ArenaTest {
             size = 0;
         }
 
-        @Override
-        protected ByteBuffer asByteBuffer() {
-            if (isDisposed()) throw new IllegalStateException("Buffer is disposed");
-            return ByteBuffer.wrap(memory(), arenaOffset(), size)
-                    .slice().asReadOnlyBuffer();
-        }
+        // @Override
+        // protected ByteBuffer asByteBuffer() {
+        //     if (isDisposed()) throw new IllegalStateException("Buffer is disposed");
+        //     return ByteBuffer.wrap(memory(), arenaOffset(), size)
+        //             .slice().asReadOnlyBuffer();
+        // }
 
         public void write(byte value) {
             if (!ensureCapacity(size + 1))
