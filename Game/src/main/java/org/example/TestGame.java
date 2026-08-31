@@ -2,15 +2,9 @@ package org.example;
 
 import io.github.nascentlogic.jgen.*;
 import io.github.nascentlogic.jgen.gfx.Color;
-import io.github.nascentlogic.jgen.gfx.ShaderProgram;
-import io.github.nascentlogic.jgen.gfx.font.Font;
-import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.io.Shader;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import org.joml.Matrix4f;
 import org.joml.Vector2i;
-
-import java.nio.ByteBuffer;
 
 import static org.lwjgl.glfw.GLFW.GLFW_KEY_A;
 
@@ -43,9 +37,8 @@ public class TestGame implements Game {
         batch = new SpriteRenderer(Jgen.get().window().gameResolution(new Vector2i()), 256);
 
 
-
-        Shader shader = Disk.resourceShader("jgen-text","jgen/glsl/text");
-        ShaderProgram textShader = new ShaderProgram(shader);
+        // Shader shader = Disk.resourceShader("jgen-text","jgen/glsl/text");
+        // ShaderProgram textShader = new ShaderProgram(shader);
 
         // String fontPath = "assets/font/BaiJamjuree-Regular.ttf";
         // String fontName = "BaiJamjuree";
@@ -54,7 +47,6 @@ public class TestGame implements Game {
         // Disk.userSavePng(font.bitmap(),"font",fontName + ".png");
         // Disk.userWriteJson(font,"font",fontName + ".json");
         // font.free();
-
 
         // ImmutableText immutableText = new ImmutableText("");
         // ImmutableText imuutableText2 = new ImmutableText(
@@ -85,8 +77,6 @@ public class TestGame implements Game {
         // Disk.userWrite(view.readBuffer(),"bufferview.txt");
         // textBuffer.free();
         // textBlock.free();
-
-
 
 
         //BitmapAtlas atlas = Disk.gameLoadAtlasOld("objects","assets","atlas");

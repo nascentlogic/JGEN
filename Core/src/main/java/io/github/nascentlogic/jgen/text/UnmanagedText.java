@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.utils.arena;
+package io.github.nascentlogic.jgen.text;
 
 /**
  * F.Dahl, 8/15/2026

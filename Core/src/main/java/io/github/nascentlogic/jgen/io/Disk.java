@@ -2,9 +2,10 @@ package io.github.nascentlogic.jgen.io;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
 import io.github.nascentlogic.jgen.gfx.Bitmap;
 import io.github.nascentlogic.jgen.gfx.Color;
+import io.github.nascentlogic.jgen.gfx.Shader;
+import io.github.nascentlogic.jgen.gfx.font.Font;
 import org.tinylog.Logger;
 import org.tinylog.configuration.Configuration;
 
@@ -17,10 +18,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-public final class Disk {
+/**
+ * F.Dahl, 8/27/2026
+ */
+public class Disk {
 
     /** Size limit (in bytes) for reading files (internal ByteBuffer allocation).
      * Assume reading larger files throw {@link IOException}. */
@@ -33,12 +36,1259 @@ public final class Disk {
     private static Gson GSON;
 
 
+    // =============================================================================
+    // FONTS
+    // =============================================================================
 
-    // **************************************************************************************
-    //  INITIALIZATION
-    // **************************************************************************************
+
+    public static List<Font> userLoadFonts(String first, String... more) throws IOException {
+        return loadFonts(resolveConfine(USER_DATA,first, more));
+    }
+
+    public static List<Font> userLoadFonts(Path path) throws IOException {
+        return loadFonts(resolveConfine(USER_DATA,path));
+    }
+
+    public static List<Font> gameLoadFonts(String first, String... more) throws IOException {
+        return loadFonts(resolveConfine(GAME_ROOT,first, more));
+    }
+
+    public static List<Font> gameLoadFonts(Path path) throws IOException {
+        return loadFonts(resolveConfine(GAME_ROOT,path));
+    }
+
+    public static List<Font> loadFonts(String first, String... more) throws IOException {
+        return loadFonts(toPath(first, more));
+    }
+
+    public static List<Font> loadFonts(Path path) throws IOException {
+        FileToken directory = FileToken.of(path); // exist or throw
+        List<FileToken> files = directory.listFilesInDir( // dir or throw
+                t -> (!t.isDirectory && t.extension.equals(".ttf")));
+        if (files.isEmpty()) return List.of();
+        Path cacheDir = USER_CACHE.resolve("jgen/font");
+
+        List<Font> fonts = new ArrayList<>();
+        for (FileToken file : files) {
+            Path cachePng = cacheDir.resolve(file.name,".png");
+            Path cacheJson = cacheDir.resolve(file.name,".json");
+            if (Files.exists(cachePng) && Files.exists(cacheJson)) {
+                try {
+                    Font font = loadJson(Font.class,cacheJson);
+                    Bitmap bitmap = loadImage(cachePng);
+                    font.setBitmap(bitmap);
+                    fonts.add(font);
+                    continue;
+                } catch (IOException e) {
+                    Logger.warn(e,"Failed to load cached font: {}",file.name);
+                }
+            }
+            Font font; // No font in cache. Generate font
+            ByteBuffer ttf = load(file.toPath(),true);
+            try {
+                font = Font.generate(file.name, ttf);
+                fonts.add(font);
+            } catch (Exception e) {
+                Logger.warn(e,"Failed to generate font: {}",file.name);
+                continue;
+            }
+
+            try {  // Cache the generated font
+                writeJson(font,cacheJson);
+                saveImage(font.bitmap(),cachePng);
+            } catch (IOException e) {
+                Logger.warn(e,"Failed to cache font: {}", file.name);
+            }
+        } return fonts;
+    }
+
+    // all fonts are cached under the same directory, no matter where they are loaded from
+    public static Font resourceFont(String first, String... more) throws IOException {
+        ResourcePath resourcePath = new ResourcePath(first,more);
+        if (!resourcePath.extension().equals(".ttf"))
+            throw new IOException("Font path is not a .ttf: \"" + resourcePath.path() + "\"");
+        String name = resourcePath.name();
+        Path cacheDir = USER_CACHE.resolve("jgen/font");
+        Path cachePng = cacheDir.resolve(name,".png");
+        Path cacheJson = cacheDir.resolve(name,".json");
+        if (Files.exists(cachePng) && Files.exists(cacheJson)) {
+            try {
+                Font font = loadJson(Font.class,cacheJson);
+                Bitmap bitmap = loadImage(cachePng);
+                font.setBitmap(bitmap);
+                return font;
+            } catch (IOException e) {
+                Logger.warn(e,"Failed to load cached font: {}",name);
+            }
+        }
+        Font font; // No font in cache. Generate font
+        ByteBuffer ttf = resource(resourcePath,true);
+        try { font = Font.generate(name,ttf);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        // Cache the generated font
+        try { writeJson(font,cacheJson);
+            saveImage(font.bitmap(),cachePng);
+        } catch (IOException e) {
+            Logger.warn(e,"Failed to cache font: {}", name);
+        } return font;
+    }
+
+    public static Font loadFont(String first, String... more) throws IOException {
+        return loadFont(toPath(first, more));
+    }
+
+    public static Font loadFont(Path path) throws IOException {
+        FileToken pathToken = FileToken.of(path); // exist or throw
+        Path absolute = pathToken.toPath();
+        if (!pathToken.extension.equals(".ttf"))
+            throw new IOException("Font path is not a .ttf: \"" + pathToken + "\"");
+        if (absolute.startsWith(USER_CACHE))
+            throw new IOException("Cannot load Font directly from cache");
+        String name = pathToken.name;
+        Path cacheDir = USER_CACHE.resolve("jgen/font");
+        Path cachePng = cacheDir.resolve(name,".png");
+        Path cacheJson = cacheDir.resolve(name,".json");
+        if (Files.exists(cachePng) && Files.exists(cacheJson)) {
+            try {
+                Font font = loadJson(Font.class,cacheJson);
+                Bitmap bitmap = loadImage(cachePng);
+                font.setBitmap(bitmap);
+                return font;
+            } catch (IOException e) {
+                Logger.warn(e,"Failed to load cached font: {}",name);
+            }
+        }
+        Font font; // No font in cache. Generate font
+        ByteBuffer ttf = load(absolute,true);
+        try { font = Font.generate(name,ttf);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        // Cache the generated font
+        try { writeJson(font,cacheJson);
+            saveImage(font.bitmap(),cachePng);
+        } catch (IOException e) {
+            Logger.warn(e,"Failed to cache font: {}", name);
+        }
+
+        return font;
+
+    }
+
+    public static Font userLoadFont(String first, String... more) throws IOException {
+        return loadFont(resolveConfine(USER_DATA,first,more));
+    }
+
+    public static Font userLoadFont(Path path) throws IOException {
+        return loadFont(resolveConfine(USER_DATA,path));
+    }
+
+    public static Font gameLoadFont(String first, String... more) throws IOException {
+        return loadFont(resolveConfine(GAME_ROOT,first,more));
+    }
+
+    public static Font gameLoadFont(Path path) throws IOException {
+        return loadFont(resolveConfine(GAME_ROOT,path));
+    }
 
 
+    // =============================================================================
+    // SHADERS
+    // =============================================================================
+
+    public static Shader resourceShader(String name, String first, String... more) throws IOException {
+        if (Objects.requireNonNull(name,"Shader name is null").isBlank())
+            throw new IOException("Shader name cannot be blank");
+        ResourcePath directory = new ResourcePath(first, more);
+        final Shader.File[] files = new Shader.File[Shader.Type.array.length];
+        for (int i = 0; i < files.length; i++) {
+            Shader.Type type = Shader.Type.array[i];
+            String filePath = directory.path() + "/" + name + type.extension;
+            try { String sourceCode = resourceString(filePath);
+                files[i] = new Shader.File(type, sourceCode);
+            } catch (IOException ignored) { /* */ }
+        } Shader shader = new Shader(name, files);
+        if (!shader.isComplete()) throw new IOException("Incomplete shader: \"" + name + "\"");
+        return shader;
+    }
+
+    public static Shader loadShader(String name, String first, String... more) throws IOException {
+        return loadShader(name,toPath(first, more));
+    }
+
+    public static Shader loadShader(String name, Path path) throws IOException {
+        if (Objects.requireNonNull(name,"Shader name is null").isBlank())
+            throw new IOException("Shader name cannot be blank");
+        Path directory = Objects.requireNonNull(path,"Path is null").toAbsolutePath().normalize();
+        if (!Files.isDirectory(directory)) throw new NotDirectoryException(directory.toString());
+        final Shader.File[] files = new Shader.File[Shader.Type.array.length];
+        for (int i = 0; i < files.length; i++) {
+            Shader.Type type = Shader.Type.array[i];
+            Path filePath = directory.resolve("/" + name + type.extension);
+            if (!Files.exists(filePath)) continue;
+            files[i] = new Shader.File(type,loadString(filePath));
+        } Shader shader = new Shader(name, files);
+        if (!shader.isComplete()) throw new IOException("Incomplete shader: \"" + name + "\"");
+        return shader;
+    }
+
+    public static Shader userLoadShader(String name, String first, String... more) throws IOException {
+        return loadShader(name,resolveConfine(USER_DATA,first,more));
+    }
+
+    public static Shader userLoadShader(String name, Path path) throws IOException {
+        return loadShader(name,resolveConfine(USER_DATA,path));
+    }
+
+    public static Shader gameLoadShader(String name, String first, String... more) throws IOException {
+        return loadShader(name,resolveConfine(GAME_ROOT,first,more));
+    }
+
+    public static Shader gameLoadShader(String name, Path path) throws IOException {
+        return loadShader(name,resolveConfine(GAME_ROOT,path));
+    }
+
+    public static Shader cacheLoadShader(String name, String first, String... more) throws IOException {
+        return loadShader(name,resolveConfine(USER_CACHE,first,more));
+    }
+
+    public static Shader cacheLoadShader(String name, Path path) throws IOException {
+        return loadShader(name,resolveConfine(USER_CACHE,path));
+    }
+
+    public static List<Shader> loadShaders(String first, String... more) throws IOException {
+        return loadShaders(toPath(first, more));
+    }
+
+    public static List<Shader> loadShaders(Path path) throws IOException {
+        FileToken directory = FileToken.of(path);
+        final Map<String, Shader.File[]> map = new HashMap<>();
+        final Shader.Type[] types = Shader.Type.array;
+        try (Stream<FileToken> stream = directory.streamDirectory()) {
+            stream.filter(t -> !t.isDirectory).forEach(file -> {
+                for (Shader.Type type : types) {
+                    if (file.extension.equals(type.extension)) {
+                        try { String sourceCode = loadString(file.toPath());
+                            Shader.File[] files = map.computeIfAbsent(file.name, k -> new Shader.File[3]);
+                            files[type.ordinal()] = new Shader.File(type, sourceCode);
+                        } catch (IOException e) { Logger.warn(e); }
+                        break;
+                    }
+                }
+            });
+        } if (map.isEmpty()) return List.of();
+        List<Shader> list = new ArrayList<>(map.size());
+        var entrySet = map.entrySet();
+        for (var entry : entrySet) {
+            Shader shader = new Shader(entry.getKey(), entry.getValue());
+            if (shader.isComplete()) list.add(shader);
+            else Logger.warn("Shader: \"{}\", missing file/s",shader.name());
+        } return list;
+    }
+
+    public static List<Shader> userLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(resolveConfine(USER_DATA,first, more));
+    }
+
+    public static List<Shader> userLoadShaders(Path path) throws IOException {
+        return loadShaders(resolveConfine(USER_DATA,path));
+    }
+
+    public static List<Shader> gameLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(resolveConfine(GAME_ROOT,first, more));
+    }
+
+    public static List<Shader> gameLoadShaders(Path path) throws IOException {
+        return loadShaders(resolveConfine(GAME_ROOT,path));
+    }
+
+    public static List<Shader> cacheLoadShaders(String first, String... more) throws IOException {
+        return loadShaders(resolveConfine(USER_CACHE,first, more));
+    }
+
+    public static List<Shader> cacheLoadShaders(Path path) throws IOException {
+        return loadShaders(resolveConfine(USER_CACHE,path));
+    }
+
+    // =============================================================================
+    // IMAGES
+    // =============================================================================
+
+
+    public static Bitmap resourceImage(String first, String... more) throws IOException {
+        return new Bitmap(resourceDirect(first, more));
+    }
+
+    public static Bitmap loadImage(String first, String... more) throws IOException {
+        return new Bitmap(loadDirect(first, more));
+    }
+
+    public static Bitmap loadImage(Path path) throws IOException {
+        return new Bitmap(loadDirect(path));
+    }
+
+    public static Bitmap userLoadImage(String first, String... more) throws IOException {
+        return new Bitmap(userLoadDirect(first, more));
+    }
+
+    public static Bitmap userLoadImage(Path path) throws IOException {
+        return new Bitmap(userLoadDirect(path));
+    }
+
+    public static Bitmap gameLoadImage(String first, String... more) throws IOException {
+        return new Bitmap(gameLoadDirect(first, more));
+    }
+
+    public static Bitmap gameLoadImage(Path path) throws IOException {
+        return new Bitmap(gameLoadDirect(path));
+    }
+
+    public static Bitmap cacheLoadImage(String first, String... more) throws IOException {
+        return new Bitmap(cacheLoadDirect(first, more));
+    }
+
+    public static Bitmap cacheLoadImage(Path path) throws IOException {
+        return new Bitmap(cacheLoadDirect(path));
+    }
+
+    public static void saveImage(Bitmap bitmap, String first, String... more) throws IOException {
+        write(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),first,more);
+    }
+
+    public static void saveImage(Bitmap bitmap, Path path) throws IOException {
+        write(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),path);
+    }
+
+    public static void userSaveImage(Bitmap bitmap, String first, String... more) throws IOException {
+        userWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),first,more);
+    }
+
+    public static void userSaveImage(Bitmap bitmap, Path path) throws IOException {
+        userWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),path);
+    }
+
+    public static void gameSaveImage(Bitmap bitmap, String first, String... more) throws IOException {
+        gameWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),first,more);
+    }
+
+    public static void gameSaveImage(Bitmap bitmap, Path path) throws IOException {
+        gameWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),path);
+    }
+
+    public static void cacheSaveImage(Bitmap bitmap, String first, String... more) throws IOException {
+        cacheWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),first,more);
+    }
+
+    public static void cacheSaveImage(Bitmap bitmap, Path path) throws IOException {
+        cacheWrite(Objects.requireNonNull(bitmap, "Bitmap is null").compress(),path);
+    }
+
+
+    // =============================================================================
+    // JSON
+    // =============================================================================
+
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T resourceJson(Class<T> clazz, String first, String... more) throws IOException {
+        return resourceJson(clazz,GSON,first,more);
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T resourceJson(Class<T> clazz, Gson gson, String first, String... more) throws IOException {
+        Objects.requireNonNull(clazz, "Class is null");
+        Objects.requireNonNull(gson, "Gson is null");
+        String jsonString = resourceString(first, more);
+        if (jsonString.isBlank()) throw new IOException("Cannot deserialize JSON: Resource is blank");
+        T object;
+        try { object = gson.fromJson(jsonString, clazz);
+        } catch (RuntimeException e) {
+            throw new IOException("Failed to parse JSON content from resource", e);
+        } if (object == null) throw new IOException("Gson returned null while deserializing resource");
+        return object;
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T userLoadJson(Class<T> clazz, String first, String... more) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(USER_DATA,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T userLoadJson(Class<T> clazz, Gson gson, String first, String... more) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(USER_DATA,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T userLoadJson(Class<T> clazz, Path path) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(USER_DATA,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T userLoadJson(Class<T> clazz, Gson gson, Path path) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(USER_DATA,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T gameLoadJson(Class<T> clazz, String first, String... more) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(GAME_ROOT,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T gameLoadJson(Class<T> clazz, Gson gson, String first, String... more) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(GAME_ROOT,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T gameLoadJson(Class<T> clazz, Path path) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(GAME_ROOT,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T gameLoadJson(Class<T> clazz, Gson gson, Path path) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(GAME_ROOT,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T cacheLoadJson(Class<T> clazz, String first, String... more) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(USER_CACHE,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T cacheLoadJson(Class<T> clazz, Gson gson, String first, String... more) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(USER_CACHE,first,more));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T cacheLoadJson(Class<T> clazz, Path path) throws IOException {
+        return loadJson(clazz,GSON,resolveConfine(USER_CACHE,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T cacheLoadJson(Class<T> clazz, Gson gson, Path path) throws IOException {
+        return loadJson(clazz,gson,resolveConfine(USER_CACHE,path));
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T loadJson(Class<T> clazz, Path path) throws IOException {
+        return loadJson(clazz,GSON,path);
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T loadJson(Class<T> clazz, String first, String... more) throws IOException {
+        return loadJson(clazz,GSON,first,more);
+    }
+
+    /** @see #loadJson(Class, Gson, Path) */
+    public static <T> T loadJson(Class<T> clazz, Gson gson, String first, String... more) throws IOException {
+        return loadJson(clazz,gson,toPath(first, more));
+    }
+
+    /**
+     * Deserializes JSON content from a file into an object of the specified class.
+     * @param <T>   the target type.
+     * @param clazz the class of {@code T}; must not be {@code null}.
+     * @param gson  the {@link Gson} instance to use; must not be {@code null}.
+     * @param path  the target file path; must not be {@code null}.
+     * @return the deserialized object instance; never {@code null}.
+     * @throws NullPointerException if {@code clazz}, {@code gson}, or {@code path} is {@code null}.
+     * @throws IOException          if an I/O error occurs, if the file is empty/invalid JSON,
+     *                              or if deserialization yields {@code null}.
+     */
+    public static <T> T loadJson(Class<T> clazz, Gson gson, Path path) throws IOException {
+        Objects.requireNonNull(clazz, "Class is null");
+        Objects.requireNonNull(gson, "Gson is null");
+        ByteBuffer buffer = loadHeap(path);
+        String jsonString = StandardCharsets.UTF_8.decode(buffer).toString();
+        if (jsonString.isBlank()) throw new IOException("Cannot deserialize JSON: File is empty or contains only whitespace: \"" + path + "\"");
+        T object;
+        try { object = gson.fromJson(jsonString, clazz);
+        } catch (RuntimeException e) {
+            throw new IOException("Failed to parse JSON content from: \"" + path + "\"", e);
+        } if (object == null) throw new IOException("Gson returned null while deserializing path: \"" + path + "\"");
+        return object;
+    }
+
+
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void writeJson(Object obj, String first, String... more) throws IOException {
+        writeJson(obj,GSON,first,more);
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void writeJson(Object obj, Path path) throws IOException {
+        writeJson(obj,GSON,path);
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void writeJson(Object obj, Gson gson, String first, String... more) throws IOException {
+        writeJson(obj,gson,toPath(first, more));
+    }
+
+    /**
+     * Serializes an object to JSON using the provided {@link Gson} instance and writes it to a file.
+     * <p> The destination file is overwritten atomically if it already exists. Missing parent
+     * directories are created automatically before writing.</p>
+     * @param obj  the object to serialize to JSON; must not be {@code null}.
+     * @param gson the {@link Gson} instance to use for serialization; must not be {@code null}.
+     * @param path the target file path; must not be {@code null}.
+     * @throws NullPointerException if {@code obj}, {@code gson}, or {@code path} is {@code null}.
+     * @throws IOException          if JSON serialization fails or an I/O error occurs while writing.
+     */
+    public static void writeJson(Object obj, Gson gson, Path path) throws IOException {
+        Objects.requireNonNull(obj, "Object is null");
+        Objects.requireNonNull(gson, "Gson is null");
+        String jsonString;
+        try { jsonString = gson.toJson(obj);
+        } catch (RuntimeException e) {
+            throw new IOException("Failed to serialize object to JSON", e);
+        } ByteBuffer content = StandardCharsets.UTF_8.encode(jsonString);
+        write(content, path, false);
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void userWriteJson(Object obj, String first, String... more) throws IOException {
+        writeJson(obj,resolveConfine(USER_DATA,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void userWriteJson(Object obj, Path path) throws IOException {
+        writeJson(obj,resolveConfine(USER_DATA,path));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void userWriteJson(Object obj, Gson gson, String first, String... more) throws IOException {
+        writeJson(obj,gson,resolveConfine(USER_DATA,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void userWriteJson(Object obj, Gson gson, Path path) throws IOException {
+        writeJson(obj,gson,resolveConfine(USER_DATA,path));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void gameWriteJson(Object obj, String first, String... more) throws IOException {
+        writeJson(obj,resolveConfine(GAME_ROOT,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void gameWriteJson(Object obj, Path path) throws IOException {
+        writeJson(obj,resolveConfine(GAME_ROOT,path));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void gameWriteJson(Object obj, Gson gson, String first, String... more) throws IOException {
+        writeJson(obj,gson,resolveConfine(GAME_ROOT,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void gameWriteJson(Object obj, Gson gson, Path path) throws IOException {
+        writeJson(obj,gson,resolveConfine(GAME_ROOT,path));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void cacheWriteJson(Object obj, String first, String... more) throws IOException {
+        writeJson(obj,resolveConfine(USER_CACHE,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void cacheWriteJson(Object obj, Path path) throws IOException {
+        writeJson(obj,resolveConfine(USER_CACHE,path));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void cacheWriteJson(Object obj, Gson gson, String first, String... more) throws IOException {
+        writeJson(obj,gson,resolveConfine(USER_CACHE,first,more));
+    }
+
+    /** @see #writeJson(Object, Gson, Path) */
+    public static void cacheWriteJson(Object obj, Gson gson, Path path) throws IOException {
+        writeJson(obj,gson,resolveConfine(USER_CACHE,path));
+    }
+
+
+    // =============================================================================
+    // STRING
+    // =============================================================================
+
+    public static List<String> resourceAsLines(String first, String... more) throws IOException {
+        return stringAsLines(resourceString(first, more));
+    }
+
+    public static List<String> asLines(String first, String... more) throws IOException {
+        return stringAsLines(loadString(first, more));
+    }
+
+    public static List<String> asLines(Path path) throws IOException {
+        return stringAsLines(loadString(path));
+    }
+
+    public static List<String> userAsLines(String first, String... more) throws IOException {
+        return stringAsLines(userLoadString(first, more));
+    }
+
+    public static List<String> userAsLines(Path path) throws IOException {
+        return stringAsLines(userLoadString(path));
+    }
+
+    public static List<String> gameAsLines(String first, String... more) throws IOException {
+        return stringAsLines(gameLoadString(first, more));
+    }
+
+    public static List<String> gameAsLines(Path path) throws IOException {
+        return stringAsLines(gameLoadString(path));
+    }
+
+    public static List<String> cacheAsLines(String first, String... more) throws IOException {
+        return stringAsLines(cacheLoadString(first, more));
+    }
+
+    public static List<String> cacheAsLines(Path path) throws IOException {
+        return stringAsLines(cacheLoadString(path));
+    }
+
+    public static String resourceString(String first, String... more) throws IOException {
+        return new String(resourceBytes(first, more), StandardCharsets.UTF_8);
+    }
+
+    public static String loadString(String first, String... more) throws IOException {
+        return new String(loadBytes(first, more), StandardCharsets.UTF_8);
+    }
+
+    public static String loadString(Path path) throws IOException {
+        return new String(loadBytes(path), StandardCharsets.UTF_8);
+    }
+
+    public static String userLoadString(String first, String... more) throws IOException {
+        return new String(userLoadBytes(first, more), StandardCharsets.UTF_8);
+    }
+
+    public static String userLoadString(Path path) throws IOException {
+        return new String(userLoadBytes(path), StandardCharsets.UTF_8);
+    }
+
+    public static String gameLoadString(String first, String... more) throws IOException {
+        return new String(gameLoadBytes(first, more), StandardCharsets.UTF_8);
+    }
+
+    public static String gameLoadString(Path path) throws IOException {
+        return new String(gameLoadBytes(path), StandardCharsets.UTF_8);
+    }
+
+    public static String cacheLoadString(String first, String... more) throws IOException {
+        return new String(cacheLoadBytes(first, more), StandardCharsets.UTF_8);
+    }
+
+    public static String cacheLoadString(Path path) throws IOException {
+        return new String(cacheLoadBytes(path), StandardCharsets.UTF_8);
+    }
+
+
+
+    public static void writeString(String content, String first, String... more) throws IOException {
+        writeBytes(stringBytes(content),first,more);
+    }
+
+    public static void writeString(String content, Path path) throws IOException {
+        writeBytes(stringBytes(content),path);
+    }
+
+    public static void appendString(String content, String first, String... more) throws IOException {
+        appendBytes(stringBytes(content),first,more);
+    }
+
+    public static void appendString(String content, Path path) throws IOException {
+        appendBytes(stringBytes(content),path);
+    }
+
+    public static void userWriteString(String content, String first, String... more) throws IOException {
+        userWriteBytes(stringBytes(content),first,more);
+    }
+
+    public static void userWriteString(String content, Path path) throws IOException {
+        userWriteBytes(stringBytes(content),path);
+    }
+
+    public static void userAppendString(String content, String first, String... more) throws IOException {
+        userAppendBytes(stringBytes(content),first,more);
+    }
+
+    public static void userAppendString(String content, Path path) throws IOException {
+        userAppendBytes(stringBytes(content),path);
+    }
+
+    public static void gameWriteString(String content, String first, String... more) throws IOException {
+        gameWriteBytes(stringBytes(content),first,more);
+    }
+
+    public static void gameWriteString(String content, Path path) throws IOException {
+        gameWriteBytes(stringBytes(content),path);
+    }
+
+    public static void gameAppendString(String content, String first, String... more) throws IOException {
+        gameAppendBytes(stringBytes(content),first,more);
+    }
+
+    public static void gameAppendString(String content, Path path) throws IOException {
+        gameAppendBytes(stringBytes(content),path);
+    }
+
+    public static void cacheWriteString(String content, String first, String... more) throws IOException {
+        cacheWriteBytes(stringBytes(content),first,more);
+    }
+
+    public static void cacheWriteString(String content, Path path) throws IOException {
+        cacheWriteBytes(stringBytes(content),path);
+    }
+
+    public static void cacheAppendString(String content, String first, String... more) throws IOException {
+        cacheAppendBytes(stringBytes(content),first,more);
+    }
+
+    public static void cacheAppendString(String content, Path path) throws IOException {
+        cacheAppendBytes(stringBytes(content),path);
+    }
+
+    // =============================================================================
+    // BYTE ARRAY
+    // =============================================================================
+
+    public static byte[] resourceBytes(String first, String... more) throws IOException {
+        return toArray(resourceHeap(first, more));
+    }
+
+    public static byte[] loadBytes(String first, String... more) throws IOException {
+        return toArray(loadHeap(first, more));
+    }
+
+    public static byte[] loadBytes(Path path) throws IOException {
+        return toArray(loadHeap(path));
+    }
+
+    public static byte[] userLoadBytes(String first, String... more) throws IOException {
+        return toArray(userLoadHeap(first, more));
+    }
+
+    public static byte[] userLoadBytes(Path path) throws IOException {
+        return toArray(userLoadHeap(path));
+    }
+
+    public static byte[] gameLoadBytes(String first, String... more) throws IOException {
+        return toArray(gameLoadHeap(first, more));
+    }
+
+    public static byte[] gameLoadBytes(Path path) throws IOException {
+        return toArray(gameLoadHeap(path));
+    }
+
+    public static byte[] cacheLoadBytes(String first, String... more) throws IOException {
+        return toArray(cacheLoadHeap(first, more));
+    }
+
+    public static byte[] cacheLoadBytes(Path path) throws IOException {
+        return toArray(cacheLoadHeap(path));
+    }
+
+    public static void writeBytes(byte[] content, String first, String... more) throws IOException {
+        write(wrapBytes(content),first,more);
+    }
+
+    public static void writeBytes(byte[] content, Path path) throws IOException {
+        write(wrapBytes(content),path);
+    }
+
+    public static void appendBytes(byte[] content, String first, String... more) throws IOException {
+        append(wrapBytes(content),first,more);
+    }
+
+    public static void appendBytes(byte[] content, Path path) throws IOException {
+        append(wrapBytes(content),path);
+    }
+
+    public static void userWriteBytes(byte[] content, String first, String... more) throws IOException {
+        userWrite(wrapBytes(content),first,more);
+    }
+
+    public static void userWriteBytes(byte[] content, Path path) throws IOException {
+        userWrite(wrapBytes(content),path);
+    }
+
+    public static void userAppendBytes(byte[] content, String first, String... more) throws IOException {
+        userAppend(wrapBytes(content),first,more);
+    }
+
+    public static void userAppendBytes(byte[] content, Path path) throws IOException {
+        userAppend(wrapBytes(content),path);
+    }
+
+    public static void gameWriteBytes(byte[] content, String first, String... more) throws IOException {
+        gameWrite(wrapBytes(content),first,more);
+    }
+
+    public static void gameWriteBytes(byte[] content, Path path) throws IOException {
+        gameWrite(wrapBytes(content),path);
+    }
+
+    public static void gameAppendBytes(byte[] content, String first, String... more) throws IOException {
+        gameAppend(wrapBytes(content),first,more);
+    }
+
+    public static void gameAppendBytes(byte[] content, Path path) throws IOException {
+        gameAppend(wrapBytes(content),path);
+    }
+
+    public static void cacheWriteBytes(byte[] content, String first, String... more) throws IOException {
+        cacheWrite(wrapBytes(content),first,more);
+    }
+
+    public static void cacheWriteBytes(byte[] content, Path path) throws IOException {
+        cacheWrite(wrapBytes(content),path);
+    }
+
+    public static void cacheAppendBytes(byte[] content, String first, String... more) throws IOException {
+        cacheAppend(wrapBytes(content),first,more);
+    }
+
+    public static void cacheAppendBytes(byte[] content, Path path) throws IOException {
+        cacheAppend(wrapBytes(content),path);
+    }
+
+    // =============================================================================
+    // BASIC
+    // =============================================================================
+
+    public static ByteBuffer resourceDirect(String first, String... more) throws IOException {
+        return resource(new ResourcePath(first, more),true);
+    }
+
+    public static ByteBuffer resourceHeap(String first, String... more) throws IOException {
+        return resource(new ResourcePath(first, more),false);
+    }
+
+    public static ByteBuffer loadDirect(String first, String... more) throws IOException {
+        return load(toPath(first, more),true);
+    }
+
+    public static ByteBuffer loadDirect(Path path) throws IOException {
+        return load(path,true);
+    }
+
+    public static ByteBuffer loadHeap(String first, String... more) throws IOException {
+        return load(toPath(first, more),false);
+    }
+
+    public static ByteBuffer loadHeap(Path path) throws IOException {
+        return load(path,false);
+    }
+
+    public static ByteBuffer userLoadDirect(String first, String... more) throws IOException {
+        return load(resolveConfine(USER_DATA,first,more),true);
+    }
+
+    public static ByteBuffer userLoadDirect(Path path) throws IOException {
+        return load(resolveConfine(USER_DATA,path),true);
+    }
+
+    public static ByteBuffer userLoadHeap(String first, String... more) throws IOException {
+        return load(resolveConfine(USER_DATA,first,more),false);
+    }
+
+    public static ByteBuffer userLoadHeap(Path path) throws IOException {
+        return load(resolveConfine(USER_DATA,path),false);
+    }
+
+    public static ByteBuffer gameLoadDirect(String first, String... more) throws IOException {
+        return load(resolveConfine(GAME_ROOT,first,more),true);
+    }
+
+    public static ByteBuffer gameLoadDirect(Path path) throws IOException {
+        return load(resolveConfine(GAME_ROOT,path),true);
+    }
+
+    public static ByteBuffer gameLoadHeap(String first, String... more) throws IOException {
+        return load(resolveConfine(GAME_ROOT,first,more),false);
+    }
+
+    public static ByteBuffer gameLoadHeap(Path path) throws IOException {
+        return load(resolveConfine(GAME_ROOT,path),false);
+    }
+
+    public static ByteBuffer cacheLoadDirect(String first, String... more) throws IOException {
+        return load(resolveConfine(USER_CACHE,first,more),true);
+    }
+
+    public static ByteBuffer cacheLoadDirect(Path path) throws IOException {
+        return load(resolveConfine(USER_CACHE,path),true);
+    }
+
+    public static ByteBuffer cacheLoadHeap(String first, String... more) throws IOException {
+        return load(resolveConfine(USER_CACHE,first,more),false);
+    }
+
+    public static ByteBuffer cacheLoadHeap(Path path) throws IOException {
+        return load(resolveConfine(USER_CACHE,path),false);
+    }
+
+
+
+    public static void write(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, toPath(first, more),false);
+    }
+
+    public static void write(ByteBuffer content, Path path) throws IOException {
+        write(content, path,false);
+    }
+
+    public static void append(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, toPath(first, more),true);
+    }
+
+    public static void append(ByteBuffer content, Path path) throws IOException {
+        write(content, path,true);
+    }
+
+    public static void userWrite(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(USER_DATA,first,more),false);
+    }
+
+    public static void userWrite(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(USER_DATA,path),false);
+    }
+
+    public static void userAppend(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(USER_DATA,first,more),true);
+    }
+
+    public static void userAppend(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(USER_DATA,path),true);
+    }
+
+    public static void gameWrite(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(GAME_ROOT,first,more),false);
+    }
+
+    public static void gameWrite(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(GAME_ROOT,path),false);
+    }
+
+    public static void gameAppend(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(GAME_ROOT,first,more),true);
+    }
+
+    public static void gameAppend(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(GAME_ROOT,path),true);
+    }
+
+    public static void cacheWrite(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(USER_CACHE,first,more),false);
+    }
+
+    public static void cacheWrite(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(USER_CACHE,path),false);
+    }
+
+    public static void cacheAppend(ByteBuffer content, String first, String... more) throws IOException {
+        write(content, resolveConfine(USER_CACHE,first,more),true);
+    }
+
+    public static void cacheAppend(ByteBuffer content, Path path) throws IOException {
+        write(content, resolveConfine(USER_CACHE,path),true);
+    }
+
+
+
+    public static void userDelete(String first, String... more) throws IOException {
+        delete(resolveConfine(USER_DATA,first,more));
+    }
+
+    public static void userDelete(Path path) throws IOException {
+        delete(resolveConfine(USER_DATA,path));
+    }
+
+    public static void cacheDelete(String first, String... more) throws IOException {
+        delete(resolveConfine(USER_CACHE,first,more));
+    }
+
+    public static void cacheDelete(Path path) throws IOException {
+        delete(resolveConfine(USER_CACHE,path));
+    }
+
+    public static void deleteCache() throws IOException {
+        delete(USER_CACHE);
+    }
+
+    // =============================================================================
+    // CORE
+    // =============================================================================
+
+    private static ByteBuffer resource(ResourcePath path, boolean direct) throws IOException {
+        try (InputStream stream = Disk.class.getResourceAsStream(path.toString())) {
+            if (stream == null) throw new FileNotFoundException("Resource could not be found: \"" + path + "\".");
+            byte[] bytes = stream.readAllBytes();
+            ByteBuffer buffer = allocate(bytes.length, direct);
+            return buffer.put(bytes).flip();
+        }
+    }
+
+    private static ByteBuffer load(Path path, boolean direct) throws IOException {
+        final Path absolute = Objects.requireNonNull(path,"Path is null").toAbsolutePath();
+        if (!Files.exists(absolute)) throw new FileNotFoundException("File not found: \"" + absolute + "\".");
+        if (!Files.isRegularFile(absolute)) throw new IOException("Path exists but is not a regular file: \"" + absolute + "\".");
+        if (Files.size(absolute) > MAX_FILE_SIZE)
+            throw new IOException("File size for: \"" + absolute + "\" exceeds the maximum allowed limit: " + MAX_FILE_SIZE);
+        final int numRetries = 3;
+        final int retryDelayMs = 8;
+        IOException lastException = null;
+        for (int i = 0; i < numRetries; i++) {
+            try (FileChannel channel = FileChannel.open(absolute, StandardOpenOption.READ)) {
+                ByteBuffer buffer = allocate((int) channel.size(), direct);
+                while (buffer.hasRemaining()) {
+                    if (channel.read(buffer) == -1) break;
+                } return buffer.flip();
+            } catch (IOException e) {
+                lastException = e;
+                if (i < numRetries - 1) {
+                    try { Thread.sleep(retryDelayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Interrupted during file load retry", ie);
+                    }
+                }
+            }
+        }
+        throw lastException;
+    }
+
+    /**
+     * Writes the remaining bytes of a {@link ByteBuffer} to the specified file path.
+     * <p> Missing parent directories are created automatically before writing. </p>
+     * <p> If {@code append} is {@code true}, content is appended to the existing file or a new file
+     * is created if it does not exist. If {@code append} is {@code false}, existing files are
+     * overwritten using a safe atomic swap mechanism to prevent partial writes on failure. </p>
+     *
+     * @param content the buffer containing data to write; must not be {@code null}.
+     * @param path    the destination file path; must not be {@code null}.
+     * @param append  {@code true} to append content; {@code false} to overwrite.
+     * @throws NullPointerException if {@code content} or {@code path} is {@code null}.
+     * @throws IOException          if an I/O error occurs during directory creation or file writing.
+     */
+    private static void write(ByteBuffer content, Path path, boolean append) throws IOException {
+        Objects.requireNonNull(content, "ByteBuffer content is null");
+        Path absolute = Objects.requireNonNull(path, "Path is null").toAbsolutePath();
+        Path parent = absolute.getParent();
+        if (parent != null) Files.createDirectories(parent);
+        if (append) writeDirect(content, absolute, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        else try { writeDirect(content, absolute, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+        } catch (FileAlreadyExistsException e) {
+            writeAtomic(content, absolute);
+        }
+    }
+
+    /**
+     * Performs a low-level write operation using a {@link FileChannel}.
+     * <p>
+     * Ensures all remaining bytes in the buffer are written to the channel and
+     * forces a synchronization with the storage device to minimize data loss.
+     * </p>
+     * @param content The data buffer to write.
+     * @param path    The target file path.
+     * @param options The {@link OpenOption}'s determining how the file is opened.
+     * @throws IOException if an I/O error occurs during opening, writing, or forcing.
+     */
+    private static void writeDirect(ByteBuffer content, Path path, OpenOption... options) throws IOException {
+        ByteBuffer workBuffer = content.duplicate();
+        try (FileChannel channel = FileChannel.open(path, options)) {
+            while (workBuffer.hasRemaining()) channel.write(workBuffer);
+            channel.force(true);
+        }
+    }
+
+    /**
+     * Safely overwrites an existing file by writing to a temporary file first.
+     * <p>
+     * This method generates a unique temporary filename using {@code System.nanoTime()}
+     * to avoid collisions. Once the write is complete and forced to disk, it performs
+     * an {@code ATOMIC_MOVE}. If the filesystem does not support atomic moves, it
+     * falls back to a standard replacement move.
+     * </p>
+     * @param content  The data buffer to write.
+     * @param path The final destination path.
+     * @throws IOException if the temporary file cannot be written or the move fails.
+     */
+    private static void writeAtomic(ByteBuffer content, Path path) throws IOException {
+        String tempName = path.getFileName().toString() + "." + System.nanoTime() + ".tmp";
+        Path tempFile = path.resolveSibling(tempName);
+        try { writeDirect(content, tempFile, StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW);
+            try { Files.move(tempFile, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) { Files.move(tempFile, path, StandardCopyOption.REPLACE_EXISTING); }
+        } finally { Files.deleteIfExists(tempFile); }
+    }
+
+    /**
+     * Deletes a file or directory recursively.
+     * <p> If the target is a symbolic link, only the link itself is deleted; the link's target
+     * contents remain untouched regardless of whether it points to a file or directory.</p>
+     * <p> If deletion fails due to an {@link AccessDeniedException} on Windows (e.g., read-only files),
+     * an attempt is made to strip the {@code dos:readonly} attribute and retry deletion. </p>
+     * @param path the file, directory, or symbolic link to delete; ignored if it does not exist.
+     * @throws IOException          if an I/O error occurs during deletion.
+     * @throws NullPointerException if {@code path} is {@code null}.
+     */
+    private static void delete(Path path) throws IOException {
+        Objects.requireNonNull(path, "Path is null");
+        // Early exit if path does not exist (checking link itself, not target)
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+        // Fast-path: regular files and symbolic links do not require tree traversal
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            deleteWithWindowsFallback(path);
+            return;
+        }
+        // Directory traversal for recursive directory deletion
+        Files.walkFileTree(path, new SimpleFileVisitor<>() {
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                deleteWithWindowsFallback(file);
+                return FileVisitResult.CONTINUE;
+            }
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) throw exc;
+                deleteWithWindowsFallback(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    /**
+     * Attempts to delete a file or directory, falling back to removing the Windows read-only attribute
+     * if an AccessDeniedException occurs.
+     */
+    private static void deleteWithWindowsFallback(Path target) throws IOException {
+        try { Files.delete(target);
+        } catch (AccessDeniedException e) {
+            if (Platform.get() != Platform.WINDOWS) throw e;
+            try { Files.setAttribute(target, "dos:readonly", false, LinkOption.NOFOLLOW_LINKS);
+                Files.delete(target);
+            } catch (Exception ex) {
+                throw e;
+            }
+        }
+    }
+
+    // =============================================================================
+    // HELPERS
+    // =============================================================================
+
+    /**
+     * Allocates a {@link ByteBuffer} of the specified size.
+     * @param size        the capacity of the buffer.
+     * @param direct if {@code true}, allocates direct memory; otherwise heap memory.
+     * @return the allocated {@code ByteBuffer}.
+     */
+    private static ByteBuffer allocate(int size, boolean direct) {
+        return direct ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
+    }
+
+    /**
+     * Reads remaining bytes from a ByteBuffer into a byte array.
+     * <p>
+     * Fast-paths to return the backing array if the buffer is heap-allocated
+     * and unshifted. Otherwise, copies memory into a new array.
+     * </p>
+     * @param buffer the source byte buffer
+     * @return the byte array containing the buffer contents
+     * @throws NullPointerException if buffer is null
+     */
+    private static byte[] toArray(ByteBuffer buffer) {
+        Objects.requireNonNull(buffer, "Null ByteBuffer to byte array.");
+        if (buffer.hasArray()) {
+            byte[] array = buffer.array();
+            if (buffer.arrayOffset() == 0 && buffer.position() == 0 && buffer.remaining() == array.length) {
+                return array;
+            }
+        }
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.duplicate().get(bytes);
+        return bytes;
+    }
+
+    /**
+     * Splits a string into an immutable list of lines using Unicode line terminators.
+     * <p>
+     * Preserves all empty lines, including trailing empty lines created by trailing terminators.
+     * Returns an empty list if the input string is {@code null} or empty.
+     * </p>
+     * @param string the string to split; may be null or empty
+     * @return an immutable list of lines representing the exact string structure
+     */
+    private static List<String> stringAsLines(String string) {
+        if (string == null || string.isEmpty()) return List.of();
+        return List.of(string.split("\\R", -1));
+    }
+
+    private static ByteBuffer wrapBytes(byte[] bytes) {
+        Objects.requireNonNull(bytes, "byte[] bytes is null");
+        return ByteBuffer.wrap(bytes);
+    }
+
+    private static byte[] stringBytes(String string) {
+        Objects.requireNonNull(string, "String is null");
+        return string.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Converts path segments to a {@link Path}.
+     * <p> This method is consistent with {@link Path#of(String, String...)},
+     * but converts internal {@link InvalidPathException}s into {@link IOException}s
+     * to catch ANY user input (E.g. from a GUI input field) </p>
+     * @param first the first path segment.
+     * @param more  additional path segments.
+     * @return a constructed Path.
+     * @throws IOException          if the path contains invalid characters.
+     * @throws NullPointerException if any of the provided segments are null.
+     */
+    private static Path toPath(String first, String... more) throws IOException {
+        try { return Path.of(first, more);
+        } catch (InvalidPathException e) {
+            throw new IOException("Invalid path segments provided", e);
+        }
+    }
+
+    /** @see Disk#resolveConfine(Path, Path) */
+    public static Path resolveConfine(Path root, String first, String... more) throws IOException {
+        return resolveConfine(root,toPath(first, more));
+    }
+
+    /**
+     * Resolves a relative path against a root directory, ensuring the target path
+     * does not syntactically escape the root directory boundary via directory traversals (e.g. "..").
+     * <p> Symbolic links within or pointing outside the root directory are permitted.</p>
+     * @param root     the base directory path.
+     * @param relative the relative path to resolve against the root.
+     * @return the resolved, normalized path.
+     * @throws IOException           if {@code relative} is absolute, if a filesystem provider mismatch occurs,
+     *                               or if the resolved path escapes {@code root}.
+     * @throws NullPointerException  if {@code root} or {@code relative} is {@code null}.
+     */
+    public static Path resolveConfine(Path root, Path relative) throws IOException {
+        Objects.requireNonNull(root, "Root path is null");
+        Objects.requireNonNull(relative, "Relative path is null");
+        if (relative.isAbsolute()) throw new IOException("Path must be relative: \"" + relative + "\"");
+        Path absoluteRoot = root.toAbsolutePath().normalize();
+        Path resolved;
+        try { resolved = absoluteRoot.resolve(relative).normalize();
+        } catch (ProviderMismatchException e) {
+            throw new IOException("FileSystem mismatch between root and relative path", e);
+        } if (!resolved.startsWith(absoluteRoot)) {
+            throw new AccessDeniedException("Access is confined to root bounds: \"" + absoluteRoot + "\"");
+        } return resolved;
+    }
+
+
+
+    // =============================================================================
+    // INITIALIZATION
+    // =============================================================================
 
     /**
      * Initializes the IO system by discovering the game's entry class,
@@ -137,10 +1387,10 @@ public final class Disk {
         } Path home = toPath(userHome);
         return switch (Platform.get()) {
             case WINDOWS -> { String env = System.getenv("APPDATA");
-                yield (env != null && !env.isBlank()) ? toPath(env) : resolveAndConfine(home, "AppData", "Roaming");
-            } case MAC -> resolveAndConfine(home, "Library", "Application Support");
+                yield (env != null && !env.isBlank()) ? toPath(env) : resolveConfine(home, "AppData", "Roaming");
+            } case MAC -> resolveConfine(home, "Library", "Application Support");
             case LINUX -> { String env = System.getenv("XDG_DATA_HOME");
-                yield (env != null && !env.isBlank()) ? toPath(env) : resolveAndConfine(home, ".local", "share");
+                yield (env != null && !env.isBlank()) ? toPath(env) : resolveConfine(home, ".local", "share");
             }
         };
     }
@@ -156,7 +1406,7 @@ public final class Disk {
         String companyName = GameModuleProperties.get(GameModuleProperties.GAME_COMPANY_NAME);
         gameName = gameName == null || gameName.isBlank() ? "Untitled-Game" : gameName.trim();
         companyName = companyName == null || companyName.isBlank() ? "JGEN" : companyName.trim();
-        return resolveAndConfine(appDataRoot,companyName,gameName);
+        return resolveConfine(appDataRoot,companyName,gameName);
     }
 
     /**
@@ -186,7 +1436,7 @@ public final class Disk {
      */
     private static void configureLogger() {
         Map<String,String> config = new LinkedHashMap<>();
-        config.put("level", devMode() ? "debug" : "info"); // Global level
+        config.put("level", DEV_MODE ? "debug" : "info"); // Global level
         boolean internalLogEnabled = false;
         Exception iLogConfEx = null;
         Exception fLogConfEx = null;
@@ -195,7 +1445,7 @@ public final class Disk {
                 config.put("writerInternal", JgenlLogWriter.class.getName());
                 internalLogEnabled = true; }
         } catch (IOException e) { iLogConfEx = e; }
-        if (!devMode()) {
+        if (!DEV_MODE) {
             try {Path logFolder = logOutputDirectory();
                 Files.createDirectories(logFolder);
                 String sep = FileSystems.getDefault().getSeparator();
@@ -209,7 +1459,7 @@ public final class Disk {
                 config.put("writerFile.format","{date: HH:mm:ss.SS} {pipe} {level|min-size=5} " +
                         "{pipe} {class-name|size=20} {pipe} {line|min-size=4} {pipe} {message}");
             } catch (IOException e) { fLogConfEx = e; }
-        } if (devMode() || fLogConfEx != null) {
+        } if (DEV_MODE || fLogConfEx != null) {
             config.put("writerConsole", "console");
             config.put("writerConsole.stream", "out");
             config.put("writerConsole.writingthread", "false");
@@ -219,575 +1469,13 @@ public final class Disk {
         if (fLogConfEx != null) Logger.warn(fLogConfEx,"Failed to create log directory - falling back to console");
         if (iLogConfEx != null) Logger.warn(iLogConfEx,"Failed to read internal log property");
         Logger.info("TinyLog initialized ({} mode, internal log: {})",
-                devMode() ? "DEVELOPMENT" : "PRODUCTION", internalLogEnabled);
+                DEV_MODE ? "DEVELOPMENT" : "PRODUCTION", internalLogEnabled);
     }
 
 
-
-
-    // **************************************************************************************
-    //  READ OPERATIONS
-    // **************************************************************************************
-
-
-    /**
-     * Loads a file from the build "resources" directory into a direct {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped direct {@code ByteBuffer} containing the resource data.
-     * @throws IOException if the resource cannot be found or read.
-     */
-    public static ByteBuffer resourceDirect(String first, String... more) throws IOException {
-        return resource(toResourcePath(first,more),true);
-    }
-
-    /**
-     * Loads a file from the build "resources" directory into a heap {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped heap {@code ByteBuffer} containing the resource data.
-     * @throws IOException if the resource cannot be found or read.
-     */
-    public static ByteBuffer resourceHeap(String first, String... more) throws IOException {
-        return resource(toResourcePath(first,more),false);
-    }
-
-    /**
-     * Loads a file from the {@code GAME_ROOT} directory into a direct {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped direct {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer gameLoadDirect(String first, String... more) throws IOException {
-        return load(resolveAndConfine(gameRootDirectory(),first,more),true);
-    }
-
-    /**
-     * Loads a file from the {@code GAME_ROOT} directory into a heap {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped heap {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer gameLoadHeap(String first, String... more) throws IOException {
-        return load(resolveAndConfine(gameRootDirectory(),first,more),false);
-    }
-
-    /**
-     * Loads a file from the {@code USER_DATA} directory into a direct {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped direct {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer userLoadDirect(String first, String... more) throws IOException {
-        return load(resolveAndConfine(userDataDirectory(),first,more),true);
-    }
-
-    /**
-     * Loads a file from the {@code USER_DATA} directory into a heap {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped heap {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer userLoadHeap(String first, String... more) throws IOException {
-        return load(resolveAndConfine(userDataDirectory(),first,more),false);
-    }
-
-    /**
-     * Loads a file from the specified path into a direct {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped direct {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer loadDirect(String first, String... more) throws IOException {
-        return load(toPath(first,more),true);
-    }
-
-    /**
-     * Loads a file from the specified path into a heap {@link ByteBuffer}.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a flipped heap {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file is missing, exceeds size limits, or is locked.
-     */
-    public static ByteBuffer loadHeap(String first, String... more) throws IOException {
-        return load(toPath(first,more),false);
-    }
-
-    /**
-     * Convenience method for reading a resource with a specified allocation type.
-     * @param filePath    the validated resource path string.
-     * @param directAlloc if {@code true}, uses direct memory; otherwise heap memory.
-     * @return a flipped {@code ByteBuffer} containing the resource data.
-     * @throws IOException if the resource cannot be found or read.
-     */
-    public static ByteBuffer resource(String filePath, boolean directAlloc) throws IOException {
-        return resourcesRead(filePath,directAlloc);
-    }
-
-    /**
-     * Convenience method for reading a filesystem file with a specified allocation type.
-     * @param filePath    the target {@link Path}.
-     * @param directAlloc if {@code true}, uses direct memory; otherwise heap memory.
-     * @return a flipped {@code ByteBuffer} containing the file data.
-     * @throws IOException if the file cannot be read after retries or exceeds size limits.
-     */
-    public static ByteBuffer load(Path filePath, boolean directAlloc) throws IOException {
-        return fileSystemRead(filePath,directAlloc);
-    }
-
-
-    /**
-     * Reads a file from the "resources" directory and returns its content as a byte array.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a {@code byte[]} containing the resource data.
-     * @throws IOException if the resource is missing or unreadable.
-     */
-    public static byte[] resourceBytes(String first, String... more) throws IOException {
-        return toArray(resourceHeap(first,more));
-    }
-
-    /**
-     * Loads a file from {@code GAME_ROOT} and returns its content as a byte array.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a {@code byte[]} containing the file data.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static byte[] gameLoadBytes(String first, String... more) throws IOException {
-        return loadBytes(resolveAndConfine(gameRootDirectory(),first,more));
-    }
-
-    /**
-     * Loads a file from {@code USER_DATA} and returns its content as a byte array.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a {@code byte[]} containing the file data.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static byte[] userLoadBytes(String first, String... more) throws IOException {
-        return loadBytes(resolveAndConfine(userDataDirectory(),first,more));
-    }
-
-    /**
-     * Loads a file from the specified path segments and returns its content as a byte array.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a {@code byte[]} containing the file data.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static byte[] loadBytes(String first, String... more) throws IOException {
-        return loadBytes(toPath(first,more));
-    }
-
-    /**
-     * Loads a file from the specified {@link Path} and returns its content as a byte array.
-     * @param filePath the path to the target file.
-     * @return a {@code byte[]} containing the file data.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static byte[] loadBytes(Path filePath) throws IOException {
-        return toArray(load(filePath,false));
-    }
-
-
-    /**
-     * Reads a resource file as a UTF-8 encoded string.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return the file content as a {@code String}.
-     * @throws IOException if the resource is missing or unreadable.
-     */
-    public static String resourceToString(String first, String... more) throws IOException {
-        return new String(resourceBytes(first,more), StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Reads a file from {@code GAME_ROOT} as a UTF-8 encoded string.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return the file content as a {@code String}.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static String gameFileToString(String first, String... more) throws IOException {
-        return fileToString(resolveAndConfine(gameRootDirectory(),first,more));
-    }
-
-    /**
-     * Reads a file from {@code USER_DATA} as a UTF-8 encoded string.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return the file content as a {@code String}.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static String userFileToString(String first, String... more) throws IOException {
-        return fileToString(resolveAndConfine(userDataDirectory(),first,more));
-    }
-
-    /**
-     * Reads a file from the specified path segments as a UTF-8 encoded string.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return the file content as a {@code String}.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static String fileToString(String first, String... more) throws IOException {
-        return fileToString(toPath(first, more));
-    }
-
-    /**
-     * Reads a file from the specified {@link Path} as a UTF-8 encoded string.
-     * @param filePath the path to the target file.
-     * @return the file content as a {@code String}.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static String fileToString(Path filePath) throws IOException {
-        return new String(loadBytes(filePath), StandardCharsets.UTF_8);
-    }
-
-
-
-    /**
-     * Reads a resource file and splits it into a list of lines.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a list of lines contained in the resource.
-     * @throws IOException if the resource is missing or unreadable.
-     */
-    public static List<String> resourceToLines(String first, String... more) throws IOException {
-        return stringAsLines(resourceToString(first,more));
-    }
-
-    /**
-     * Reads a file from {@code GAME_ROOT} and splits it into a list of lines.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a list of lines contained in the file.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static List<String> gameFileToLines(String first, String... more) throws IOException {
-        return stringAsLines(gameFileToString(first,more));
-    }
-
-    /**
-     * Reads a file from {@code USER_DATA} and splits it into a list of lines.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a list of lines contained in the file.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static List<String> userFileToLines(String first, String... more) throws IOException {
-        return stringAsLines(userFileToString(first,more));
-    }
-
-    /**
-     * Reads a file from the specified segments and splits it into a list of lines.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @return a list of lines contained in the file.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static List<String> fileToLines(String first, String... more) throws IOException {
-        return stringAsLines(fileToString(first,more));
-    }
-
-    /**
-     * Reads a file from the specified {@link Path} and splits it into a list of lines.
-     * @param filePath the path to the target file.
-     * @return a list of lines contained in the file.
-     * @throws IOException if the file is missing or unreadable.
-     */
-    public static List<String> fileToLines(Path filePath) throws IOException {
-        return stringAsLines(fileToString(filePath));
-    }
-
-
-
-    /**
-     * Deserializes a resource JSON file into an object of the specified class.
-     * @param clazz the class of the object to return.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @param <T>   the type of the deserialized object.
-     * @return the deserialized object.
-     * @throws IOException if the resource is missing, unreadable, or contains invalid JSON.
-     */
-    public static  <T> T resourceJson(Class<T> clazz, String first, String... more) throws IOException {
-        return jsonToObject(gson(),clazz,resourceToString(first,more));
-    }
-
-    /**
-     * Deserializes a JSON file from {@code GAME_ROOT} into an object of the specified class.
-     * @param clazz the class of the object to return.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @param <T>   the type of the deserialized object.
-     * @return the deserialized object.
-     * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
-     */
-    public static  <T> T gameLoadJson(Class<T> clazz, String first, String... more) throws IOException {
-        return loadJson(clazz, resolveAndConfine(gameRootDirectory(),first,more));
-    }
-
-    /**
-     * Deserializes a JSON file from {@code USER_DATA} into an object of the specified class.
-     * @param clazz the class of the object to return.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @param <T>   the type of the deserialized object.
-     * @return the deserialized object.
-     * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
-     */
-    public static  <T> T userLoadJson(Class<T> clazz, String first, String... more) throws IOException {
-        return loadJson(clazz, resolveAndConfine(userDataDirectory(),first,more));
-    }
-
-    /**
-     * Deserializes a JSON file from the specified segments into an object of the specified class.
-     * @param clazz the class of the object to return.
-     * @param first the first path segment.
-     * @param more  optional additional path segments.
-     * @param <T>   the type of the deserialized object.
-     * @return the deserialized object.
-     * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
-     */
-    public static  <T> T loadJson(Class<T> clazz, String first, String... more) throws IOException {
-        return loadJson(clazz,toPath(first,more));
-    }
-
-    /**
-     * Deserializes a JSON file from the specified {@link Path} into an object of the specified class.
-     * @param clazz    the class of the object to return.
-     * @param filePath the path to the target JSON file.
-     * @param <T>      the type of the deserialized object.
-     * @return the deserialized object.
-     * @throws IOException if the file is missing, unreadable, or contains invalid JSON.
-     */
-    public static  <T> T loadJson(Class<T> clazz, Path filePath) throws IOException {
-        return jsonToObject(gson(),clazz,fileToString(filePath));
-    }
-
-
-    // **************************************************************************************
-    //  IMAGES / SHADERS ++
-    // **************************************************************************************
-
-
-    public static Bitmap resourcePng(String first, String... more) throws Exception {
-        return new Bitmap(resourceDirect(first,more));
-    }
-    public static Bitmap gameLoadPng(String first, String... more) throws Exception {
-        return new Bitmap(gameLoadDirect(first,more));
-    }
-    public static Bitmap userLoadPng(String first, String... more) throws Exception {
-        return new Bitmap(userLoadDirect(first,more));
-    }
-    public static Bitmap loadPng(String first, String... more) throws Exception {
-        return new Bitmap(loadDirect(first,more));
-    }
-    public static void userSavePng(Bitmap bitmap, String first, String... more) throws IOException {
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        savePng(bitmap,path);
-    }
-    public static void savePng(Bitmap bitmap, Path filePath) throws IOException {
-        Objects.requireNonNull(bitmap, "Bitmap is null");
-        fileSystemWrite(bitmap.compress(),filePath,false);
-    }
-
-
-    public static List<Shader> gameLoadShaders(String first, String... more) throws IOException {
-        return loadShaders(gameRootDirectory(first,more));
-    }
-
-    public static List<Shader> userLoadShaders(String first, String... more) throws IOException {
-        return loadShaders(userDataDirectory(first,more));
-    }
-
-    /**
-     * Loads a {@link Shader} from resources by its base filename.
-     * The path should point to the resource directory containing the shader files.
-     * @param name  name of the files without extension (e.g., "basic")
-     * @param first first segment of the resource directory path
-     * @param more  optional additional segments of the resource directory path
-     * @return a complete {@link Shader} (containing at least .vert and .frag sources)
-     * @throws IOException if the shader is incomplete or the directory path is invalid
-     */
-    public static Shader resourceShader(String name, String first, String... more) throws IOException {
-        Objects.requireNonNull(name, "Resource shader name is null");
-        if (name.isBlank()) throw new IOException("Resource shader name cannot be blank");
-        String directory = toResourcePath(first, more);
-        Shader.File[] files = new Shader.File[Shader.Type.array.length];
-        for (int i = 0; i < files.length; i++) {
-            Shader.Type type = Shader.Type.array[i];
-            String filePath = directory + "/" + name + type.extension;
-            try { String sourceCode = resourceToString(filePath);
-                files[i] = new Shader.File(type, sourceCode);
-            } catch (IOException ignored) { /* */ }
-        } Shader shader = new Shader(name, files);
-        if (!shader.isComplete()) {
-            throw new IOException("Incomplete shader resource: \"" + name + "\" in " + directory);
-        } return shader;
-    }
-
-    public static List<Shader> loadShaders(Path directoryPath) throws IOException {
-        if (!pathIsDir(Objects.requireNonNull(directoryPath)))
-            throw new IOException("Target path is not a directory: " + directoryPath);
-        Map<String, Shader.File[]> map = new HashMap<>();
-        final Shader.Type[] types = Shader.Type.array;
-        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
-            stream.filter(token -> !token.isDirectory()).forEach(token -> {
-                for (Shader.Type type : types) {
-                    if (token.extension.equals(type.extension)) {
-                        try { String sourceCode = fileToString(Path.of(token.path));
-                            Shader.File[] files = map.computeIfAbsent(token.name, k -> new Shader.File[3]);
-                            files[type.ordinal()] = new Shader.File(type, sourceCode);
-                        } catch (IOException e) { Logger.warn(e); }
-                        break;
-                    }
-                }
-            });
-        } if (map.isEmpty()) return List.of();
-        List<Shader> list = new ArrayList<>(map.size());
-        var entrySet = map.entrySet();
-        for (var entry : entrySet) {
-            Shader shader = new Shader(entry.getKey(), entry.getValue());
-            if (shader.isComplete()) {
-                list.add(shader);
-            } else Logger.warn("Shader: \"{}\", missing file/s",shader.name());
-        } return list;
-    }
-
-
-
-
-
-
-    // **************************************************************************************
-    //  WRITE / MODIFY / DELETE - OPERATIONS (USER DATA DIRECTORY ONLY)
-    // **************************************************************************************
-
-
-
-
-    /**
-     * Atomically overwrites a file in {@code USER_DATA} with {@link ByteBuffer} content.
-     * @param content the buffer containing data to write.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the I/O operation fails.
-     */
-    public static void userWrite(ByteBuffer content, String first, String... more) throws IOException {
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(content,path,false);
-    }
-
-    /**
-     * Atomically overwrites a file in {@code USER_DATA} with {@code byte[]} content.
-     * @param content the byte array to write.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the I/O operation fails.
-     */
-    public static void userWrite(byte[] content, String first, String... more) throws IOException {
-        Objects.requireNonNull(content,"byte[] content is null");
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(ByteBuffer.wrap(content),path,false);
-    }
-
-    /**
-     * Atomically overwrites a file in {@code USER_DATA} with a UTF-8 string.
-     * @param content the string to write.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the I/O operation fails.
-     */
-    public static void userWrite(String content, String first, String... more) throws IOException {
-        Objects.requireNonNull(content,"String content is null");
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(StandardCharsets.UTF_8.encode(content),path,false);
-    }
-
-    /**
-     * Serializes an object to JSON and atomically overwrites a file in {@code USER_DATA}.
-     * @param obj   the object to serialize.
-     * @param first the first path segment relative to {@code USER_DATA}.
-     * @param more  optional additional path segments.
-     * @throws IOException if write access is denied or serialization fails.
-     */
-    public static void userWriteJson(Object obj, String first, String... more) throws IOException {
-        writeJson(obj,resolveAndConfine(userDataDirectory(),first,more));
-    }
-
-    private static void writeJson(Object obj, Path filePath) throws IOException {
-        String jsonString = objectToJson(gson(),obj);
-        ByteBuffer content = StandardCharsets.UTF_8.encode(jsonString);
-        fileSystemWrite(content,filePath,false);
-    }
-
-
-    /**
-     * Appends {@link ByteBuffer} data directly to the end of a file in {@code USER_DATA}.
-     * @param content the buffer containing data to append.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the append operation fails.
-     */
-    public static void userAppend(ByteBuffer content, String first, String... more) throws IOException {
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(content,path,true);
-    }
-
-    /**
-     * Appends {@code byte[]} data directly to the end of a file in {@code USER_DATA}.
-     * @param content the byte array to append.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the append operation fails.
-     */
-    public static void userAppend(byte[] content, String first, String... more) throws IOException {
-        Objects.requireNonNull(content,"byte[] content is null");
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(ByteBuffer.wrap(content),path,true);
-    }
-
-    /**
-     * Appends a UTF-8 string directly to the end of a file in {@code USER_DATA}.
-     * @param content the string to append.
-     * @param first   the first path segment relative to {@code USER_DATA}.
-     * @param more    optional additional path segments.
-     * @throws IOException if write access is denied or the append operation fails.
-     */
-    public static void userAppend(String content, String first, String... more) throws IOException {
-        Objects.requireNonNull(content,"String content is null");
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemWrite(StandardCharsets.UTF_8.encode(content),path,true);
-    }
-
-    /**
-     * Deletes a file or directory within {@code USER_DATA} recursively.
-     * @param first the first path segment relative to {@code USER_DATA}.
-     * @param more  optional additional path segments.
-     * @throws IOException if the path points outside {@code USER_DATA} or deletion fails.
-     */
-    public static void userDelete(String first, String... more) throws IOException {
-        Path path = resolveAndConfine(userDataDirectory(),first,more);
-        fileSystemDelete(path);
-    }
-
-
-
-
-    // **************************************************************************************
-    //  PUBLIC GETTERS
-    // **************************************************************************************
-
-
-
+    // =============================================================================
+    // PUBLIC GETTERS
+    // =============================================================================
 
     /**
      * @return {@code true} if the engine is running in a development environment
@@ -805,68 +1493,22 @@ public final class Disk {
     }
 
     /**
-     * Construct valid a GAME_ROOT path.
-     * @param first the first path segment.
-     * @param more optional additional path segments.
-     * @return absolute path resolved to GAME_ROOT directory
-     * @throws IOException if the resulting path is invalid our point outside GAME_ROOT
-     */
-    public static Path gameRootDirectory(String first, String... more) throws IOException {
-        return resolveAndConfine(gameRootDirectory(),first,more);
-
-    }
-
-    /**
      * @return the absolute {@link Path} to the persistent user data directory (USER_DATA).
      */
     public static Path userDataDirectory() {
         return USER_DATA;
     }
 
-    /**
-     * Construct a valid USER_DATA path.
-     * @param first the first path segment.
-     * @param more optional additional path segments.
-     * @return absolute path resolved to USER_DATA directory
-     * @throws IOException if the resulting path is invalid our point outside USER_DATA
-     */
-    public static Path userDataDirectory(String first, String... more) throws IOException {
-        return resolveAndConfine(userDataDirectory(),first,more);
-    }
 
     public static Path userCacheDirectory() { return USER_CACHE; }
 
     /**
      * Logs are outputed here if running from .jar / .exe.
      * When running from the IDEA / Development, logging is outputed to the console instead.
-     * @return Path to the log file directory, should be {@code [USER_DATA]/logs}.
+     * @return Path to the log file directory: {@code [USER_DATA]/logs}.
      */
     public static Path logOutputDirectory() {
         return USER_DATA.resolve("logs");
-    }
-
-    /**
-     * @param path any absolute or relative path.
-     * @return {@code true} if the path exists on disk and is NOT a symbolic link.
-     */
-    public static boolean pathExists(Path path) {
-        return Files.exists(path, LinkOption.NOFOLLOW_LINKS);
-    }
-
-    /**
-     * @param path any absolute or relative path.
-     * @return {@code true} if the path exists as a regular file and is NOT a symbolic link.
-     */
-    public static boolean pathIsFile(Path path) {
-        return Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS);
-    }
-
-    /**
-     * @param path any absolute or relative path.
-     * @return {@code true} if the path exists as a directory and is NOT a symbolic link.
-     */
-    public static boolean pathIsDir(Path path) {
-        return Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS);
     }
 
     /**
@@ -876,698 +1518,6 @@ public final class Disk {
     public static Gson gson() {
         return GSON;
     }
-
-
-
-
-    // **************************************************************************************
-    //  BASE METHODS FOR: READ / WRITE / DELETE
-    //  All public methods must use these (for consistency).
-    // **************************************************************************************
-
-
-
-
-    /**
-     * Reads file from the build "resources" directory.
-     * The method is not optimized for performance, but decent for loading text files
-     * or small images/icons. As a general rule: Game assets should not be stored in "resources".
-     * @param filePath resource path
-     * @param directAlloc if true, uses direct memory; otherwise uses heap memory.
-     * @return flipped ByteBuffer of raw data ready for read.
-     * @throws IOException file not found or unable to read for any reason
-     * @throws NullPointerException if filePath is null.
-     */
-    private static ByteBuffer resourcesRead(String filePath, boolean directAlloc) throws IOException {
-        Objects.requireNonNull(filePath,"String filePath is null");
-        filePath = filePath.startsWith("/") ? filePath : "/" + filePath;
-        Logger.debug("<-- \"{}\"",filePath);
-        try (InputStream is = Disk.class.getResourceAsStream(filePath)) {
-            if (is == null) throw new FileNotFoundException("Resource could not be found: " + filePath);
-            byte[] bytes = is.readAllBytes();
-            ByteBuffer buffer = allocateBuffer(bytes.length, directAlloc);
-            return buffer.put(bytes).flip();
-        }
-    }
-
-    /**
-     * Reads any external file into a ByteBuffer. Includes a retry mechanism
-     * to mitigate temporary file locks (e.g., from Antivirus software).
-     * @param filePath Path of the file.
-     * @param directAlloc if true, uses direct memory; otherwise uses heap memory.
-     * @return a flipped ByteBuffer containing the raw file data.
-     * @throws IOException if the file is not found, not a regular file, exceeds
-     * size limit or remains unreadable after multiple retries.
-     * @throws NullPointerException if filePath is null.
-     */
-    private static ByteBuffer fileSystemRead(Path filePath, boolean directAlloc) throws IOException {
-        Objects.requireNonNull(filePath,"Path filePath is null");
-        Logger.debug("<-- \"{}\"",filePath.toAbsolutePath());
-        if (!Files.isRegularFile(filePath,LinkOption.NOFOLLOW_LINKS))
-            throw new FileNotFoundException("File not found or not a regular file: " + filePath.toAbsolutePath());
-        long initialSize = Files.size(filePath); // If the file is too large, it throws outside (never enters the loop).
-        if (initialSize > Integer.MAX_VALUE) throw new IOException("File size (" + initialSize + " bytes) exceeds Integer.MAX_VALUE.");
-        if (initialSize > MAX_FILE_SIZE) throw new IOException("File size (" + initialSize + " bytes) exceeds the maximum allowed limit: " + MAX_FILE_SIZE);
-        final int maxRetries = 3;
-        final int retryDelayMs = 8;
-        IOException lastException = null;
-        for (int i = 0; i < maxRetries; i++) {
-            try (FileChannel channel = FileChannel.open(filePath, StandardOpenOption.READ)) {
-                long currentSize = channel.size(); // no cap inside the retry loop (It's fine)
-                ByteBuffer buffer = allocateBuffer((int) currentSize, directAlloc);
-                while (buffer.hasRemaining()) {
-                    if (channel.read(buffer) == -1) break;
-                } return buffer.flip();
-            } catch (IOException e) {
-                lastException = e;
-                if (i < maxRetries - 1) {
-                    try { Thread.sleep(retryDelayMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Interrupted during file load retry", ie);
-                    }
-                }
-            }
-        }
-        throw lastException;
-    }
-
-    /**
-     * Writes a {@code ByteBuffer} to the specified file path.
-     * <p>
-     * This method intelligently branches between three writing strategies:
-     * <ul>
-     * <li><b>Append:</b> Directly adds data to the end of an existing or new file.</li>
-     * <li><b>New File:</b> Performs a direct write if the file does not already exist.</li>
-     * <li><b>Atomic Overwrite:</b> If the file exists and {@code append} is false, it uses
-     * a temporary "sidecar" file and an atomic move to prevent data corruption.</li>
-     * </ul>
-     * @param content  The {@code ByteBuffer} containing data to be written.
-     * Position must be at the start of the data.
-     * @param filePath The destination {@link Path}.
-     * @param append   If true, appends to the file; if false, performs an atomic overwrite.
-     * @throws IOException          If the directory cannot be created, the file cannot be
-     * opened, or the I/O operation fails.
-     * @throws NullPointerException if {@code content} or {@code filePath} is null.
-     */
-    private static void fileSystemWrite(ByteBuffer content, Path filePath, boolean append) throws IOException {
-        Objects.requireNonNull(content, "ByteBuffer content is null");
-        Objects.requireNonNull(filePath, "Path filePath is null");
-        Logger.debug("--> \"{}\"",filePath.toAbsolutePath());
-        Path parent = filePath.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        if (append) writeDirect(content, filePath, StandardOpenOption.APPEND);
-        else { try { writeDirect(content, filePath, StandardOpenOption.CREATE_NEW);
-            } catch (FileAlreadyExistsException e) {
-                writeAtomic(content, filePath);
-            }
-        }
-    }
-
-    /**
-     * Performs a low-level write operation using a {@link FileChannel}.
-     * <p>
-     * Ensures all remaining bytes in the buffer are written to the channel and
-     * forces a synchronization with the storage device to minimize data loss.
-     * </p>
-     * @param content The data buffer to write.
-     * @param path    The target file path.
-     * @param mode    The {@link OpenOption} determining how the file is opened.
-     * @throws IOException if an I/O error occurs during opening, writing, or forcing.
-     */
-    private static void writeDirect(ByteBuffer content, Path path, OpenOption mode) throws IOException {
-        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.CREATE, mode)) {
-            while (content.hasRemaining()) channel.write(content);
-            channel.force(true); // Forced to wait
-        }
-    }
-
-    /**
-     * Safely overwrites an existing file by writing to a temporary file first.
-     * <p>
-     * This method generates a unique temporary filename using {@code System.nanoTime()}
-     * to avoid collisions. Once the write is complete and forced to disk, it performs
-     * an {@code ATOMIC_MOVE}. If the filesystem does not support atomic moves, it
-     * falls back to a standard replacement move.
-     * </p>
-     * @param content  The data buffer to write.
-     * @param filePath The final destination path.
-     * @throws IOException if the temporary file cannot be written or the move fails.
-     */
-    private static void writeAtomic(ByteBuffer content, Path filePath) throws IOException {
-        String tempName = filePath.getFileName().toString() + "." + System.nanoTime() + ".tmp";
-        Path tempFile = filePath.resolveSibling(tempName);
-        try { writeDirect(content, tempFile, StandardOpenOption.TRUNCATE_EXISTING);
-            try { Files.move(tempFile, filePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException e) { Files.move(tempFile, filePath, StandardCopyOption.REPLACE_EXISTING); }
-        } finally { Files.deleteIfExists(tempFile); }
-    }
-
-    /**
-     * Deletes a file or a directory (including all sub-contents) recursively.
-     * Handles symbolic links safely by deleting the link itself rather than the target.
-     * @param path the file or directory to delete.
-     * @throws IOException if any file cannot be deleted (e.g., access denied or I/O error).
-     * @throws NullPointerException if {@code path} is null.
-     */
-    private static void fileSystemDelete(Path path) throws IOException {
-        Objects.requireNonNull(path, "Path path is null");
-        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
-        Logger.debug("<X> \"{}\"",path.toAbsolutePath());
-        Files.walkFileTree(path, new SimpleFileVisitor<>() {
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                try { Files.delete(file);
-                } catch (AccessDeniedException e) {
-                    if (Platform.get() == Platform.WINDOWS) {
-                        try { Files.setAttribute(file, "dos:readonly", false);
-                            Files.delete(file);
-                        } catch (Exception ex) { throw e; }
-                    } else throw e;
-                } return FileVisitResult.CONTINUE;
-            } public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-                if (exc != null) throw exc;
-                try { Files.delete(dir);
-                } catch (AccessDeniedException e) {
-                    if (Platform.get() == Platform.WINDOWS) {
-                        try { Files.setAttribute(dir, "dos:readonly", false);
-                            Files.delete(dir);
-                        } catch (Exception ex) { throw e; }
-                    } else throw e;
-                } return FileVisitResult.CONTINUE;
-            }
-        });
-    }
-
-
-
-
-    // **************************************************************************************
-    //  HELPERS
-    // **************************************************************************************
-
-    /**
-     * Resolves a relative path against an absolute root directory and enforces strict
-     * sandbox boundary confinement.
-     * <p>This method prevents directory traversal vulnerabilities (e.g., via {@code ..}
-     * segments or malicious absolute path overrides) by verifying that the fully
-     * resolved, normalized destination structurally resides within the designated root
-     * directory hierarchy.</p>
-     * @param root     the absolute base directory
-     * @param relative the relative path segment or filename to be appended
-     * @return a fully resolved, absolute, and normalized {@link Path} guaranteed to be
-     * contained within the provided root bounds
-     * @throws NullPointerException      if either {@code root} or {@code relative} is {@code null}
-     * @throws IOException               if the {@code root} path is not absolute, if the
-     * {@code relative} path is absolute, or if a
-     * {@link ProviderMismatchException} occurs due to mixed
-     * virtual or host filesystem instances
-     * @throws AccessDeniedException     if the normalized combination of the paths attempts
-     * to escape outside the structural boundary of the root directory
-     */
-    public static Path resolveAndConfine(Path root, Path relative) throws IOException {
-        Objects.requireNonNull(root, "Root Path object is null");
-        Objects.requireNonNull(relative, "Relative Path object is null");
-        // Strict contract validation
-        if (!root.isAbsolute()) throw new IOException("Root path must be absolute: \"" + root + "\"");
-        if (relative.isAbsolute()) throw new IOException("Relative path must be relative: \"" + relative + "\"");
-        // Resolve and systematically normalize the final path to collapse '..' traversal attempts
-        root = root.normalize();
-        Path resolved;
-        try { resolved = root.resolve(relative).normalize();
-        } catch (ProviderMismatchException e) {
-            throw new IOException("FileSystem mismatch during sandbox resolution", e);
-        } // Secure the boundary against the normalized root anchor
-        if (!resolved.startsWith(root)) {
-            throw new AccessDeniedException("Access is confined to root bounds: " + root);
-        } return resolved;
-    }
-
-
-    /** @see #resolveAndConfine(Path, Path) */
-    public static Path resolveAndConfine(Path root, String first, String... more) throws IOException {
-        return resolveAndConfine(root, toPath(first, more));
-    }
-
-    /**
-     * Converts path segments to a {@link Path}.
-     * <p>
-     * This method is consistent with {@link Path#of(String, String...)},
-     * but converts internal {@link InvalidPathException}s into {@link IOException}s
-     * to catch ANY user input (E.g. from a GUI input field)
-     * </p>
-     * @param first the first path segment.
-     * @param more  additional path segments.
-     * @return a constructed Path.
-     * @throws IOException          if the path contains invalid characters.
-     * @throws NullPointerException if any of the provided segments are null.
-     */
-    private static Path toPath(String first, String... more) throws IOException {
-        nullCheckSegments(first,more);
-        try { return Path.of(first, more);
-        } catch (InvalidPathException e) {
-            throw new IOException("Invalid path segments provided", e);
-        }
-    }
-
-    /**
-     * Joins multiple string segments into a single, platform-independent resource path.
-     * <p>
-     * This method concatenates segments with forward slashes.
-     * before delegating the validation and normalization logic to {@link #parseResourcePath(String)}.
-     * </p>
-     * @param first the first path segment
-     * @param more optional additional path segments.
-     * @return a validated, root-relative resource path string starting with "/".
-     * @throws IOException the resulting path is invalid.
-     * @throws NullPointerException if any of the provided segments are null.
-     */
-    private static String toResourcePath(String first, String... more) throws IOException {
-        nullCheckSegments(first,more);
-        String path;
-        if (more.length == 0) {
-            path = first;
-        } else {
-            StringBuilder sb = new StringBuilder();
-            sb.append(first);
-            for (String segment : more) {
-                if (!segment.isEmpty()) {
-                    if (!sb.isEmpty())
-                        sb.append('/');
-                    sb.append(segment);
-                }
-            } path = sb.toString();
-        } return parseResourcePath(path);
-    }
-
-    /**
-     * Validate and normalize a resource path string for use with {@link Class#getResourceAsStream(String)}.
-     * Use in tandem with {@link #toResourcePath(String, String...)} (Internal use only)
-     * <p>
-     * This method enforces three core rules:
-     * <ul>
-     * <li>Separators are standardized to forward slashes ({@code /}).</li>
-     * <li>Redundant segments ({@code .}, {@code ..}) are collapsed via {@link Path#normalize()}.</li>
-     * <li>Any path attempting to escape the classpath root (e.g., starting with {@code ..}) is rejected.</li>
-     * </ul>
-     * </p>
-     * @param path the joined path string to validate.
-     * @return a normalized path string with a mandatory leading slash.
-     * @throws IOException if the path is malformed, blank, or violates root-access security rules.
-     */
-    private static String parseResourcePath(String path) throws IOException {
-        String standardized = path.trim().replace('\\', '/');
-        while (standardized.startsWith("/")) {
-            standardized = standardized.substring(1);
-        } // Catch cases where the input was just "/" or "   "
-        if (standardized.isBlank()) {
-            throw new IOException("Resource path is blank or resolves to root (\"/\")");
-        } try { //  Use Path API to normalize "." and ".." tokens
-            Path normalized = Path.of(standardized).normalize();
-            // Convert back to String and ensure forward slashes (Path.toString() is OS-dependent)
-            String result = normalized.toString().replace('\\', '/');
-            // Detailed Validation
-            // isEmpty(): user provided something like "folder/.."
-            // equals("."): user provided "."
-            // startsWith(".."): user provided "../../secret.txt"
-            if (result.isEmpty() || result.equals(".") || result.startsWith("..")) {
-                throw new IOException("Invalid resource path (escapes root or invalid target): " + path);
-            } return "/" + result;
-        } catch (InvalidPathException e) {
-            throw new IOException("Malformed resource path: " + path, e);
-        }
-    }
-
-    /**
-     * Early null check path segments. To make sure the API stays consistent.
-     * Called before constructing {@link Path} objects OR resource {@link String} paths internally.
-     * @param first the first path segment
-     * @param more optional additional path segments.
-     * @throws NullPointerException if "first" is null or any of the "more" segments (when provided) are null.
-     */
-    private static void nullCheckSegments(String first, String... more) {
-        Objects.requireNonNull(first,"Null path segment: \"first\".");
-        Objects.requireNonNull(more,"Null path varArgs: \"...more\".");
-        for (String segment : more) {
-            Objects.requireNonNull(segment,"One or more null path segments: \"...more\".");
-        }
-    }
-
-    /**
-     * @param gson {@link Gson} instance used for conversion.
-     * @param clazz {@code Class<T>} of the expected object
-     * @param json A JSON-formatted string representing an instance of {@code Class<T>}.
-     * @return The instance of {@code Class<T>}
-     * @throws IOException if the Json-string is not a valid representation for an object of type classOf
-     * or else unable to convert the string to an Object.
-     * @throws NullPointerException if any of the arguments are null
-     */
-    private static <T> T jsonToObject(Gson gson, Class<T> clazz, String json) throws IOException {
-        Objects.requireNonNull(clazz,"Class argument is null");
-        Objects.requireNonNull(json,"Json-string argument is null");
-        Objects.requireNonNull(gson,"Gson object argument is null");
-        try { T object = gson.fromJson(json,clazz);
-            if (object == null)
-                throw new IOException("unable to deserialize json String: \n" + json);
-            return object;
-        } catch (JsonSyntaxException e) {
-            throw new IOException(e);
-        }
-    }
-
-    /**
-     * @param gson {@link Gson} instance used for conversion.
-     * @param obj object for conversion
-     * @return Json-formatted String representing {@code obj}.
-     */
-    private static String objectToJson(Gson gson, Object obj) {
-        Objects.requireNonNull(obj,"Object argument is null");
-        Objects.requireNonNull(gson,"Gson object argument is null");
-        return gson.toJson(obj);
-    }
-
-    /**
-     * Converts a ByteBuffer to a byte array.
-     * <p>
-     * This method attempts to return the buffer's underlying array if possible (zero-copy).
-     * Otherwise, it copies the remaining bytes into a new array.
-     * </p>
-     * @param buffer the buffer to convert.
-     * @return the byte array containing the remaining bytes.
-     * @throws NullPointerException if the buffer is null.
-     */
-    private static byte[] toArray(ByteBuffer buffer) {
-        Objects.requireNonNull(buffer,"Null ByteBuffer to byte array.");
-        if (buffer.hasArray()) {
-            byte[] array = buffer.array();
-            if (buffer.arrayOffset() == 0 && buffer.remaining() == array.length) return array;
-        } byte[] bytes = new byte[buffer.remaining()];
-        buffer.duplicate().get(bytes);
-        return bytes;
-    }
-
-    /**
-     * Splits a string into a mutable list of lines.
-     * <p>
-     * This method splits the string using the regular expression {@code \\R},
-     * which matches any Unicode line break sequence (such as \n, \r, and \r\n).
-     * </p>
-     * @param string the string to split; may be null or empty.
-     * @return a mutable {@link ArrayList} containing the lines of the string.
-     */
-    private static List<String> stringAsLines(String string) {
-        return (string == null || string.isEmpty())
-                ? new ArrayList<>()
-                : new ArrayList<>(Arrays.asList(string.split("\\R", -1)));
-    }
-
-    /**
-     * Allocates a {@link ByteBuffer} of the specified size.
-     * @param size        the capacity of the buffer.
-     * @param directAlloc if {@code true}, allocates direct memory; otherwise heap memory.
-     * @return the allocated {@code ByteBuffer}.
-     */
-    private static ByteBuffer allocateBuffer(int size, boolean directAlloc) {
-        return directAlloc ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
-    }
-
-
-
-
-    // =============================================================================
-    // FILE SEARCH
-    // =============================================================================
-
-
-
-    /** A lightweight, immutable descriptor representing a file or folder.
-     * @param name         The isolated name of folder OR file WITHOUT the extension (never blank).
-     * @param extension    The file extension WITH the "." (E.g. ".png"), or empty string for directories.
-     * @param path         The absolute path (E.g. "[root]/assets/images/duck.png").
-     * @param lastModified The last time (in milliseconds since the epoch) the file was modified.
-     * @param isDirectory  True if this token represents a directory. */
-    public record FileToken(String name, String extension, String path, long lastModified, boolean isDirectory) implements Comparable<FileToken> {
-        public FileToken {
-            Objects.requireNonNull(path);
-            Objects.requireNonNull(name);
-            Objects.requireNonNull(extension);
-            if (name.isBlank()) throw new IllegalArgumentException("name cannot be blank");
-        } public int compareTo(FileToken o) {
-            if (this.isDirectory != o.isDirectory) {
-                return this.isDirectory ? -1 : 1;
-            } return this.name.compareToIgnoreCase(o.name);
-        } int fingerPrint() {
-            int result = 17;
-            result = 31 * result + name.hashCode();
-            result = 31 * result + Long.hashCode(lastModified);
-            return result;
-        } public boolean equals(Object obj) {
-            if (obj == this) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;
-            FileToken other = (FileToken) obj;
-            return path.equals(other.path);
-        } public int hashCode() { return path.hashCode(); }
-    }
-
-    public static List<FileToken> gameListFiles(String first, String... more) throws IOException {
-        return listFiles(resolveAndConfine(gameRootDirectory(),toPath(first,more)));
-    }
-
-    public static List<FileToken> gameListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
-        return listFiles(resolveAndConfine(gameRootDirectory(),toPath(first,more)),filter);
-    }
-
-    public static List<FileToken> userListFiles(String first, String... more) throws IOException {
-        return listFiles(resolveAndConfine(userDataDirectory(),toPath(first,more)));
-    }
-
-    public static List<FileToken> userListFiles(Predicate<FileToken> filter, String first, String... more) throws IOException {
-        return listFiles(resolveAndConfine(userDataDirectory(),toPath(first,more)),filter);
-    }
-
-    public static List<FileToken> listFiles(Path directoryPath) throws IOException {
-        return listFiles(directoryPath,null);
-    }
-
-    public static List<FileToken> listFiles(Path directoryPath, Predicate<FileToken> filter) throws IOException {
-        try (Stream<FileToken> stream = streamDirectory(directoryPath)) {
-            return filter == null ? stream.toList() : stream.filter(filter).toList();
-        }
-    }
-
-    @SuppressWarnings("resource")
-    private static Stream<FileToken> streamDirectory(Path directoryPath) throws IOException {
-        if (!pathIsDir(directoryPath)) {
-            throw new IOException("Target path is not a directory: " + directoryPath);
-        } Stream<Path> pathStream = Files.list(directoryPath.toAbsolutePath().normalize());
-        return pathStream.map(Disk::pathToToken).filter(Objects::nonNull);
-    }
-
-    /* single usage private method. we know the path to be absolute before calling this */
-    private static FileToken pathToToken(Path absolutePath) {
-        if (!pathExists(absolutePath)) return null;
-        Path fileNamePath = absolutePath.getFileName();
-        String fileName = fileNamePath == null ? "" : fileNamePath.toString();
-        if (fileName.isBlank()) return null; // Safely skip root directories
-        try { var attributes = Files.readAttributes(absolutePath, BasicFileAttributes.class);
-            long lastModified = attributes.lastModifiedTime().toMillis();
-            boolean isDirectory = attributes.isDirectory();
-            String tokenName = fileName;
-            String extension = "";
-            if (!isDirectory) {
-                int dotIndex = fileName.lastIndexOf('.');
-                if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
-                    tokenName = fileName.substring(0, dotIndex);
-                    extension = fileName.substring(dotIndex); }
-            } return new FileToken(tokenName, extension, absolutePath.toString(), lastModified, isDirectory);
-        } catch (IOException e) { Logger.warn(e,"Failed to read file attributes: \"{}\"", absolutePath);
-            return null;
-        }
-    }
-
-
-    // =============================================================================
-    // Texture Atlas
-    // =============================================================================
-
-    public static Atlas gameLoadAtlas(String name, String first, String... more) throws IOException {
-        Objects.requireNonNull(name);
-        if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
-        Path relativePath = toPath(first,more).normalize(); // <-- save
-        Path sourcePath = resolveAndConfine(GAME_ROOT,relativePath);    // atlas or images in game root
-        Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
-        if (!pathIsDir(sourcePath)) {
-            // even though the atlas may be cached, the game path must still exist. cache is not deleted here
-            throw new IOException("Unable to locate atlas: \"" + sourcePath + "\".");
-        }
-        String atlasBaseName = name + Atlas.FILE_NAME_SUFFIX; // [name]_atlas
-        Path gameInfoPath = sourcePath.resolve(atlasBaseName + ".json");
-
-        if (pathIsFile(gameInfoPath)) {
-            // STATIC LOAD
-            // A name_atlas.json file exist in game directory.
-            // attempt to load info + accociated .png's in the same directory
-            // Cache is not involved here. If load fails, it fails.
-
-            final Bitmap[] bitmaps = new Bitmap[Atlas.ImageType.array.length];
-            Atlas.Info info = loadJson(Atlas.Info.class,gameInfoPath);
-            // just in case, we repopulate relevant info.
-            info.name = name;
-            info.directory = relativePath.toString();
-            info.mondifiedHash = 0;
-
-            // Find accociated bitmaps
-            try (Stream<FileToken> stream = streamDirectory(sourcePath)) {
-                stream.filter(token -> !token.isDirectory() && token.extension.equals(".png"))
-                        .forEach(token -> {
-                            for (Atlas.ImageType type : Atlas.ImageType.array) {
-                                String fileName = atlasBaseName + type.fileSuffix;
-                                if (token.name.equals(fileName)) {
-                                    Path path = Path.of(token.path);
-                                    try { Bitmap bitmap = new Bitmap(load(path,true));
-                                        bitmaps[type.ordinal()] = bitmap;
-                                    } catch (IOException e) {
-                                        Logger.warn(e);
-                                    }
-                                }
-                            }
-                        });
-            } catch (IOException e) { Logger.warn(e); }
-            return new Atlas(info,bitmaps);
-        }
-
-        // ATP
-        // No name_atlas.json found in game directory.
-        // Check in cache. If cache have name_atlas.json, check modifiedHash
-        // if no name_atlas.json present in cache or source directory in modified -> repack
-        // else use atlas png's in cache
-
-
-        final int[] modifiedHash = {17};
-        List<FileToken> sourcePngTokens = listFiles(sourcePath, token -> {
-            if (!token.isDirectory && token.extension.equals(".png")) {
-                if (!token.name.contains(Atlas.FILE_NAME_SUFFIX)) {
-                    modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
-                    return true; }
-            } return false;
-        });
-
-
-        Path cacheInfoPath = sourcePath.resolve(atlasBaseName + ".json");
-
-        if (pathIsFile(cacheInfoPath)) {
-
-            // if cache exist and there is no files in source, delete cache
-
-            Atlas.Info info = loadJson(Atlas.Info.class,cacheInfoPath);
-            // just in case, we repopulate relevant info.
-            info.directory = relativePath.toString();
-            info.name = name;
-
-
-
-            // name_atlas.json found in cache.
-
-
-        }
-
-
-
-
-
-
-
-
-        // List<Atlas.SorurceImage> sourceImages;
-
-        // No cache
-
-
-
-        return null;
-    }
-
-    public static BitmapAtlas gameLoadAtlasOld(String name, String first, String... more) throws IOException {
-        Objects.requireNonNull(name);
-        if (name.isBlank()) throw new IOException("Atlas name cannot be blank");
-        Path relativePath = toPath(first,more).normalize(); // <-- save
-        Path sourcesPath = resolveAndConfine(GAME_ROOT,relativePath);    // images in game root
-        Path cachePath = resolveAndConfine(USER_CACHE,relativePath);    // atlas in user cache
-        if (!pathIsDir(sourcesPath)) {
-            // even though the atlas may be cached,
-            // the images path must exist
-            // cache is not deleted here
-            throw new IOException("Unable to locate atlas: \"" + sourcesPath + "\".");
-        }
-
-        final String atlasFileName = name + BitmapAtlas.FILE_SUFFIX;
-        final FileToken[] cachedTokens = new FileToken[2];
-
-
-        if (pathIsDir(cachePath)) {
-            try (Stream<FileToken> stream = streamDirectory(cachePath)) {
-                stream.filter(token -> !token.isDirectory() && token.name().equals(atlasFileName))
-                        .forEach(token -> {
-                            String ext = token.extension();
-                            if (ext.equals(".json")) cachedTokens[0] = token;
-                            else if (ext.equals(".png")) cachedTokens[1] = token; });
-            } catch (IOException e) { Logger.warn(e); }
-        }
-
-        final int[] modifiedHash = {17};
-        List<FileToken> imageTokens = listFiles(sourcesPath, token -> {
-            if (!token.isDirectory && token.extension.equals(".png")) {
-                modifiedHash[0] = 31 * modifiedHash[0] + token.fingerPrint();
-                return true;
-            } return false;
-        });
-
-        if (cachedTokens[0] != null && cachedTokens[1] != null) {
-            Path cachePathJson = Path.of(cachedTokens[0].path);
-            Path cachePathPng  = Path.of(cachedTokens[1].path);
-            if (imageTokens.isEmpty()) {
-                fileSystemDelete(cachePathJson);
-                fileSystemDelete(cachePathPng);
-            }
-            else try {
-                BitmapAtlas atlas = loadJson(BitmapAtlas.class,cachePathJson);
-                if (atlas != null && !atlas.isOutdated(modifiedHash[0])) {
-                    Bitmap atlasBitmap = new Bitmap(load(cachePathPng,true));
-                    atlas.setBitmap(atlasBitmap);
-                    atlas.rebuildLookupMap();
-                    return atlas;
-                }
-            } catch (IOException e) { Logger.warn(e);}
-        }
-
-        if (imageTokens.isEmpty())
-            throw new IOException("Unable to generate atlas: \""
-                    + sourcesPath + "\". No source files.");
-
-
-        List<Bitmap> bitmaps    = new ArrayList<>(imageTokens.size());
-        List<String> names      = new ArrayList<>(imageTokens.size());
-        for (FileToken token : imageTokens) {
-            try { bitmaps.add(new Bitmap(load(Path.of(token.path),true)));
-                names.add(token.name);
-            } catch (Exception e) { Logger.warn(e);}
-        }
-
-        Logger.debug("Packing atlas \"{}\", ({} files)",name,bitmaps.size());
-        BitmapAtlas atlas = new BitmapAtlas(name,bitmaps,names,modifiedHash[0]);
-        for (Bitmap image : bitmaps) image.free();
-
-        Path atlasJsonPath = cachePath.resolve(atlasFileName + ".json");
-        Path atlasPngPath  = cachePath.resolve(atlasFileName + ".png");
-        Logger.debug("Saving to cache");
-        try { writeJson(atlas,atlasJsonPath);
-            Bitmap atlasBitmap = atlas.bitmap();
-            if (atlasBitmap != null) savePng(atlasBitmap,atlasPngPath);
-        } catch (IOException e) {
-            Logger.warn(e,"Failed to cache atlas");
-        } return atlas;
-    }
-
-
 
 
 

@@ -2,7 +2,7 @@ package org.example;
 
 import io.github.nascentlogic.jgen.gfx.*;
 import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.io.Shader;
+import io.github.nascentlogic.jgen.gfx.Shader;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.joml.Matrix4f;
@@ -245,7 +245,7 @@ public class SpriteRenderer implements Disposable {
         Texture texture = Texture.generate2D(width,height);
         texture.allocate(TextureFormat.RGBA16F,false);
         texture.filterNearest();
-        texture.clampToBorder();
+        texture.clampToEdge();
         Framebuffer framebuffer = new Framebuffer(width, height);
         framebuffer.attachTexture(texture,0,true);
         framebuffer.drawbuffer(0);

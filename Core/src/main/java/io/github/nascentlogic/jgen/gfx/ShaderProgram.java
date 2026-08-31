@@ -2,7 +2,6 @@ package io.github.nascentlogic.jgen.gfx;
 
 import io.github.nascentlogic.jgen.Jgen;
 import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.io.Shader;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.joml.*;

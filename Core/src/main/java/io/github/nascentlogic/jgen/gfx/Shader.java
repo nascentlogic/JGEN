@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.io;
+package io.github.nascentlogic.jgen.gfx;
 
 
 import java.util.Arrays;
@@ -50,7 +50,7 @@ public class Shader implements Iterable<Shader.File> {
         if (fSource != null) files[Type.FRAG_SHADER.ordinal()] = new File(Type.FRAG_SHADER,fSource);
     }
 
-    Shader(String name, File... files) {
+    public Shader(String name, File... files) {
         this.files = new File[Type.array.length];
         this.name = Objects.requireNonNull(name);
         Objects.requireNonNull(files);

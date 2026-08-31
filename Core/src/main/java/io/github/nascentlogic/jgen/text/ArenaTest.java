@@ -1,8 +1,7 @@
-package io.github.nascentlogic.jgen.utils.arena;
+package io.github.nascentlogic.jgen.text;
 
 import io.github.nascentlogic.jgen.utils.JgenUtils;
 
-import java.nio.ByteBuffer;
 import java.util.*;
 
 /**
