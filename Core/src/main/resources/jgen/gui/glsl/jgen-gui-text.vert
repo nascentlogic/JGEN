@@ -7,7 +7,7 @@ layout (location = 1) in vec4 aColor; // color
 #define FIRST_CHAR 32u
 #define LAST_CHAR 126u
 
-uniform vec2 uResolution; // target buffer size ("screen size")
+uniform vec2 uResolution;
 
 // tl------tr
 // |        |
@@ -23,6 +23,7 @@ struct CharData {
     TextureRegion region; // NDC
     vec4 color;
     uint font;
+    float screenPxRange; // Changed from dfPixelRange to actual screen space range
     float dfPixelRange;
     bool cursor;
 };
@@ -39,14 +40,15 @@ struct Glyph {
 
 struct Font {
     Glyph[NUM_PRINTABLE_CHARS + 1] glyphs; // characters + cursor
-    uint texSlot;   // font texture 0 -> 4 (uneccessarry)
     float size;     // font size (generated size in pixels)
-    float padding;  // glyph padding (used for sdf band width)
-    float unused;   // unused
+    float msdfRange;// (sdf band width)
+    float unused0;  // unused
+    float unused1;  // unused
 };
 
 layout (std140, binding = TEXT_BINDING_POINT) uniform TextBlock {
     Font[NUM_FONTS] fonts;
+    uint[NUM_FONTS] indexMap;
 } textBlock;
 
 
@@ -64,6 +66,7 @@ VertexData unpackVertexData(float floatBits) {
     data.gSize  = (intBits >> 8 ) & 0xFF;
     data.font   = (intBits >> 16) & 0xFF;
     data.unused = (intBits >> 24) & 0xFF;
+    data.font = textBlock.indexMap[data.font];
     return data;
 }
 
@@ -103,12 +106,12 @@ void main() {
 
     Glyph glyph;
     bool isCursor;
-    uint glyphIndex = vertexData.ch - FIRST_CHAR;
-    if(glyphIndex < 0 || glyphIndex >= NUM_PRINTABLE_CHARS) {
+
+    if (vertexData.ch < FIRST_CHAR || vertexData.ch > LAST_CHAR) {
         glyph = font.glyphs[NUM_PRINTABLE_CHARS]; // cursor glyph
         isCursor = true;
     } else {
-        glyph = font.glyphs[glyphIndex];
+        glyph = font.glyphs[vertexData.ch - FIRST_CHAR];
         isCursor = false;
     }
 
@@ -117,8 +120,10 @@ void main() {
     CharData charData;
     charData.region = generateRegion(glyph, penScreenPos, scale);
     charData.color = color;
-    charData.font = font.texSlot;
-    charData.dfPixelRange = font.padding * 2.0;
+    charData.font = vertexData.font;
+
+    charData.screenPxRange = (font.msdfRange * 2.0) * scale;
+    charData.dfPixelRange = font.msdfRange * 2.0;
     charData.cursor = isCursor;
     vsOut.character = charData;
 

@@ -10,6 +10,7 @@ struct CharData {
     TextureRegion region;
     vec4 color;
     uint font;
+    float screenPxRange; // Changed from dfPixelRange to actual screen space range
     float dfPixelRange;
     bool cursor;
 };
@@ -23,6 +24,7 @@ in VSOUT {
 out GSOUT {
     vec2 uv;
     flat vec4 color;
+    flat float screenPxRange; // Pass through
     flat float dfPixelRange;
     flat uint texSlot;
     flat bool cursor;
@@ -32,6 +34,7 @@ void main() {
     CharData ch = gsIn[0].character;
     // Pass flat attributes constant across all 4 vertices
     gsOut.color        = ch.color;
+    gsOut.screenPxRange = ch.screenPxRange;
     gsOut.dfPixelRange = ch.dfPixelRange;
     gsOut.texSlot      = ch.font;
     gsOut.cursor       = ch.cursor;

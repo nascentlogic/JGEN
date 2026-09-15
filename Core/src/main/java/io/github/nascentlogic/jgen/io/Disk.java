@@ -5,7 +5,7 @@ import com.google.gson.GsonBuilder;
 import io.github.nascentlogic.jgen.gfx.Bitmap;
 import io.github.nascentlogic.jgen.gfx.Color;
 import io.github.nascentlogic.jgen.gfx.Shader;
-import io.github.nascentlogic.jgen.gfx.font.Font;
+import io.github.nascentlogic.jgen.gui.Font;
 import org.tinylog.Logger;
 import org.tinylog.configuration.Configuration;
 
@@ -66,12 +66,12 @@ public class Disk {
         List<FileToken> files = directory.listFilesInDir( // dir or throw
                 t -> (!t.isDirectory && t.extension.equals(".ttf")));
         if (files.isEmpty()) return List.of();
-        Path cacheDir = USER_CACHE.resolve("jgen/font");
+        Path cacheDir = USER_CACHE.resolve("font");
 
         List<Font> fonts = new ArrayList<>();
         for (FileToken file : files) {
-            Path cachePng = cacheDir.resolve(file.name,".png");
-            Path cacheJson = cacheDir.resolve(file.name,".json");
+            Path cachePng = cacheDir.resolve(file.name +".png");
+            Path cacheJson = cacheDir.resolve(file.name +".json");
             if (Files.exists(cachePng) && Files.exists(cacheJson)) {
                 try {
                     Font font = loadJson(Font.class,cacheJson);
@@ -108,9 +108,9 @@ public class Disk {
         if (!resourcePath.extension().equals(".ttf"))
             throw new IOException("Font path is not a .ttf: \"" + resourcePath.path() + "\"");
         String name = resourcePath.name();
-        Path cacheDir = USER_CACHE.resolve("jgen/font");
-        Path cachePng = cacheDir.resolve(name,".png");
-        Path cacheJson = cacheDir.resolve(name,".json");
+        Path cacheDir = USER_CACHE.resolve("font");
+        Path cachePng = cacheDir.resolve(name +".png");
+        Path cacheJson = cacheDir.resolve(name +".json");
         if (Files.exists(cachePng) && Files.exists(cacheJson)) {
             try {
                 Font font = loadJson(Font.class,cacheJson);
@@ -147,9 +147,9 @@ public class Disk {
         if (absolute.startsWith(USER_CACHE))
             throw new IOException("Cannot load Font directly from cache");
         String name = pathToken.name;
-        Path cacheDir = USER_CACHE.resolve("jgen/font");
-        Path cachePng = cacheDir.resolve(name,".png");
-        Path cacheJson = cacheDir.resolve(name,".json");
+        Path cacheDir = USER_CACHE.resolve("font");
+        Path cachePng = cacheDir.resolve(name +".png");
+        Path cacheJson = cacheDir.resolve(name +".json");
         if (Files.exists(cachePng) && Files.exists(cacheJson)) {
             try {
                 Font font = loadJson(Font.class,cacheJson);
@@ -1023,7 +1023,8 @@ public class Disk {
     // CORE
     // =============================================================================
 
-    private static ByteBuffer resource(ResourcePath path, boolean direct) throws IOException {
+
+    public static ByteBuffer resource(ResourcePath path, boolean direct) throws IOException {
         try (InputStream stream = Disk.class.getResourceAsStream(path.toString())) {
             if (stream == null) throw new FileNotFoundException("Resource could not be found: \"" + path + "\".");
             byte[] bytes = stream.readAllBytes();
@@ -1032,7 +1033,7 @@ public class Disk {
         }
     }
 
-    private static ByteBuffer load(Path path, boolean direct) throws IOException {
+    public static ByteBuffer load(Path path, boolean direct) throws IOException {
         final Path absolute = Objects.requireNonNull(path,"Path is null").toAbsolutePath();
         if (!Files.exists(absolute)) throw new FileNotFoundException("File not found: \"" + absolute + "\".");
         if (!Files.isRegularFile(absolute)) throw new IOException("Path exists but is not a regular file: \"" + absolute + "\".");
@@ -1247,7 +1248,7 @@ public class Disk {
      * @throws IOException          if the path contains invalid characters.
      * @throws NullPointerException if any of the provided segments are null.
      */
-    private static Path toPath(String first, String... more) throws IOException {
+    public static Path toPath(String first, String... more) throws IOException {
         try { return Path.of(first, more);
         } catch (InvalidPathException e) {
             throw new IOException("Invalid path segments provided", e);

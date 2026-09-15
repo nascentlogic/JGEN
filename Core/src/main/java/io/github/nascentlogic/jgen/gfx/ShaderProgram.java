@@ -652,10 +652,10 @@ public class ShaderProgram implements Disposable {
                 blitProgram = new ShaderProgram(new Shader("jgen-blit", vSourceDouble(), fSourceBlit()));
                 srgbProgram = new ShaderProgram(new Shader("jgen-linearToSrgb", vSourceDouble(), fSourceSrgb()));
                 mergeProgram = new ShaderProgram(new Shader("jgen-merge",vSourceSingle(),fSourceMerge()));
-                udfSeedProgram = new ShaderProgram(Disk.resourceShader("udf-seed","jgen/glsl/udf"));
-                udfJumpProgram = new ShaderProgram(Disk.resourceShader("udf-jump","jgen/glsl/udf"));
-                udfResolveProgram = new ShaderProgram(Disk.resourceShader("udf-resolve","jgen/glsl/udf"));
-                udfNormalProgram = new ShaderProgram(Disk.resourceShader("udf-height-normal","jgen/glsl/udf"));
+                udfSeedProgram = new ShaderProgram(Disk.resourceShader("udf-seed", "jgen/gfx/glsl/udf"));
+                udfJumpProgram = new ShaderProgram(Disk.resourceShader("udf-jump", "jgen/gfx/glsl/udf"));
+                udfResolveProgram = new ShaderProgram(Disk.resourceShader("udf-resolve", "jgen/gfx/glsl/udf"));
+                udfNormalProgram = new ShaderProgram(Disk.resourceShader("udf-height-normal", "jgen/gfx/glsl/udf"));
                 ShaderProgram.useNone();
             } catch (Exception e) { throw new RuntimeException(e);}
 
@@ -700,6 +700,7 @@ public class ShaderProgram implements Disposable {
                                                float detailExp,
                                                float normalScalar) {
 
+            // 0,0.01f,32,1.5f,0.7f,1.1f,0.5f,2.0f
             Texture udfTexture = generateDistanceField(source,distFunc,threshold);
             int width = source.width();
             int height = source.height();

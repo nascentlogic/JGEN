@@ -141,9 +141,7 @@ public class Mouse {
         } return dst;
     }
 
-    public Vector2f position() {
-        return positionCurrent;
-    }
+    public Vector2f position() { return positionCurrent; }
 
     public Vector2f dragVector(int button) {
         return dragVector[button];

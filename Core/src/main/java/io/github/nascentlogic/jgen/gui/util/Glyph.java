@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.gfx.font;
+package io.github.nascentlogic.jgen.gui.util;
 
 /**
  * Font glyph

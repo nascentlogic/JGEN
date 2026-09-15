@@ -7,6 +7,7 @@ import org.joml.Matrix4f;
  */
 public class JgenMath {
 
+
     private static final double INV_LN2 = 1.0 / Math.log(2.0);
 
     /**
@@ -56,6 +57,18 @@ public class JgenMath {
     public static float clamp(float value) {
         return Math.clamp(value, 0f, 1f);
     }
+
+
+    public static int wrapi(int value, int len) {
+        return Math.floorMod(value, len);
+    }
+
+
+    public static float wrapf(float value, float len) {
+        float mod = value % len;
+        return mod < 0.0f ? mod + len : mod;
+    }
+
 
     /**
      * Constructs a 2D orthographic screen-space matrix with (0,0) at the bottom-left.

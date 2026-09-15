@@ -201,6 +201,7 @@ public class Framebuffer implements Disposable {
         }
     }
 
+    public void  clearColorInt(int drawBufferIndex, int value) { clearColorInt(drawBufferIndex,value,value,value,value); }
     public void clearColorInt(int drawBufferIndex, int r, int g, int b, int a) {
         if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for draw");
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -209,6 +210,7 @@ public class Framebuffer implements Disposable {
         }
     }
 
+    public void  clearColorUint(int drawBufferIndex, int value) { clearColorUint(drawBufferIndex,value,value,value,value); }
     public void clearColorUint(int drawBufferIndex, int r, int g, int b, int a) {
         if (DRAW_BUFFER != handle) throw new IllegalStateException("Framebuffer is not currently bound for draw");
         try (MemoryStack stack = MemoryStack.stackPush()) {

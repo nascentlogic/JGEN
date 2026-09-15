@@ -1,7 +1,8 @@
-package io.github.nascentlogic.jgen.gfx.font;
+package io.github.nascentlogic.jgen.gui;
 
 import io.github.nascentlogic.jgen.gfx.Bitmap;
 import io.github.nascentlogic.jgen.gfx.Buffers;
+import io.github.nascentlogic.jgen.gui.util.Glyph;
 import io.github.nascentlogic.jgen.utils.AtlasPacker;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.TextureRegion;
@@ -31,15 +32,16 @@ import static org.lwjgl.util.msdfgen.MSDFGenExt.*;
  */
 public class Font implements Disposable {
 
-    public static final int FONT_SIZE    = 48;
-    public static final int FONT_PADDING = 4;
+    public static final int ATLAS_MARGIN = 3;
+    public static final int FONT_SIZE    = 32;
+    public static final int MSDF_RANGE   = 5; // use this naming instead
     public static final int NUM_GLYPHS   = 95;   // ' ' (32) .. '~' (126)
     public static final int FIRST_CHAR   = 32;
     public static final int LAST_CHAR    = 126;
 
     public final String name;
     public final float size;
-    public final float padding;
+    public final float msdfRange;
     public final float ascent;
     public final float descent;
     public final float lineGap;
@@ -55,7 +57,7 @@ public class Font implements Disposable {
     private Font() {
         name = "";
         size = 0f;
-        padding = 0f;
+        msdfRange = 0f;
         ascent = 0f;
         descent = 0f;
         lineGap = 0f;
@@ -69,7 +71,7 @@ public class Font implements Disposable {
 
     private Font(String name,
                  float size,
-                 float padding,
+                 float msdfRange,
                  float ascent,
                  float descent,
                  float lineGap,
@@ -82,7 +84,7 @@ public class Font implements Disposable {
                  Bitmap bitmap) {
         this.name = name;
         this.size = size;
-        this.padding = padding;
+        this.msdfRange = msdfRange;
         this.ascent = ascent;
         this.descent = descent;
         this.lineGap = lineGap;
@@ -95,13 +97,27 @@ public class Font implements Disposable {
         this.bitmap = bitmap;
     }
 
+
+
     /**
      * Unchecked.
      * @param c ascii value 32 -> 126 (inclusive)
      * @return glyph of character
      */
-    public Glyph glyph(byte c) {
+    public Glyph glyphUnchecked(byte c) {
         return glyphs[c - FIRST_CHAR];
+    }
+
+    /**
+     * Safe glyph lookup. Returns Space (glyphs[0]) if character is out of printable ASCII range.
+     * @param c ascii value 32 -> 126 (inclusive)
+     * @return glyph of character
+     */
+    public Glyph glyph(byte c) {
+        int index = c - FIRST_CHAR;
+        if (index < 0 || index >= NUM_GLYPHS) {
+            return glyphs[0];
+        } return glyphs[index];
     }
 
     /**
@@ -115,6 +131,10 @@ public class Font implements Disposable {
         final int li = left  - FIRST_CHAR;
         final int ri = right - FIRST_CHAR;
         return kerning[li * NUM_GLYPHS + ri];
+    }
+
+    public float indentAdvance() {
+        return glyphs[0].advance(); // space
     }
 
     public float lineHeight() {
@@ -150,7 +170,8 @@ public class Font implements Disposable {
         try (STBTTFontinfo stbInfo = STBTTFontinfo.create()) {
 
             if (!stbtt_InitFont(stbInfo, ttf)) throw new Exception("STB failed to initialise font");
-            float stbScale = stbtt_ScaleForPixelHeight(stbInfo, FONT_SIZE);
+            //float stbScale = stbtt_ScaleForPixelHeight(stbInfo, FONT_SIZE);
+            float stbScale = stbtt_ScaleForMappingEmToPixels(stbInfo, FONT_SIZE);
 
             float ascent;
             float descent;
@@ -217,7 +238,12 @@ public class Font implements Disposable {
                 List<AtlasPacker.Rectangle> toPack = new ArrayList<>(NUM_GLYPHS);
                 for (int i = 0; i < NUM_GLYPHS; i++) {
                     GlyphImage image = glyphImages[i];
-                    toPack.add(new AtlasPacker.Rectangle(i,image.bitmap.width(),image.bitmap.height()));
+                    toPack.add(new AtlasPacker.Rectangle(
+                            i,
+                            image.bitmap.width() + ATLAS_MARGIN * 2,
+                            image.bitmap.height() + ATLAS_MARGIN * 2
+                    ));
+                    // toPack.add(new AtlasPacker.Rectangle(i,image.bitmap.width(),image.bitmap.height()));
                 } Vector2i atlasSize = new Vector2i();
                 List<AtlasPacker.Region> packedResult = AtlasPacker.pack(toPack, atlasSize);
                 if (packedResult.size() != NUM_GLYPHS) throw new Exception("Atlas packer failed to pack all glyph regions");
@@ -225,26 +251,55 @@ public class Font implements Disposable {
                 Bitmap atlas = new Bitmap(atlasSize.x,atlasSize.y,3);
                 Glyph[] glyphs = new Glyph[NUM_GLYPHS];
                 Vector4f uvCoords = new Vector4f();
+                TextureRegion reg = new TextureRegion();
                 for (AtlasPacker.Region packed : packedResult) {
                     int index = packed.id();
                     GlyphImage image = glyphImages[index];
-                    TextureRegion region = packed.r();
-                    region.uvCoords(atlasSize.x,atlasSize.y,uvCoords);
+
+                    // The actual pixel rect inside the atlas for this glyph (excluding margin)
+                    int glyphX = packed.r().x + ATLAS_MARGIN;
+                    int glyphY = packed.r().y + ATLAS_MARGIN;
+                    int glyphW = image.bitmap.width();
+                    int glyphH = image.bitmap.height();
+                    reg.set(glyphX,glyphY,glyphW,glyphH);
+                    reg.uvCoords(atlasSize.x,atlasSize.y,uvCoords);
                     glyphs[index] = new Glyph(
                             (char) image.codepoint,
                             image.advance,
                             image.offsetX,
                             image.offsetY,
-                            region.x,
-                            region.y,
-                            region.w,
-                            region.h,
+                            glyphX,
+                            glyphY,
+                            glyphW,
+                            glyphH,
                             uvCoords.x,
                             uvCoords.y,
                             uvCoords.z,
                             uvCoords.w);
-                    atlas.blitRegion(image.bitmap,region.x,region.y);
+                    atlas.blitRegion(image.bitmap, glyphX, glyphY);
+                    // extrudeEdges(atlas, image.bitmap, glyphX, glyphY);
                     image.bitmap.free();
+
+
+                    // TextureRegion region = packed.r();
+                    // region.uvCoords(atlasSize.x,atlasSize.y,uvCoords);
+                    //glyphs[index] = new Glyph(
+                    //        (char) image.codepoint,
+                    //        image.advance,
+                    //        image.offsetX,
+                    //        image.offsetY,
+                    //        region.x,
+                    //        region.y,
+                    //        region.w,
+                    //        region.h,
+                    //        uvCoords.x,
+                    //        uvCoords.y,
+                    //        uvCoords.z,
+                    //        uvCoords.w);
+
+
+                    // atlas.blitRegion(image.bitmap,region.x,region.y);
+
                 }
 
                 // =============================================================================
@@ -266,7 +321,7 @@ public class Font implements Disposable {
                 return new Font(
                         name,
                         FONT_SIZE,
-                        FONT_PADDING,
+                        MSDF_RANGE,
                         ascent,
                         descent,
                         lineGap,
@@ -319,7 +374,7 @@ public class Font implements Disposable {
 
         // Space has no outline — skip MSDF and emit a small black placeholder.
         if (codePoint == ' ') {
-            int size = 1 + FONT_PADDING * 2;
+            int size = 1 + MSDF_RANGE * 2;
             ByteBuffer black = MemoryUtil.memCalloc(size * size * 3);
             Bitmap bitmap = new Bitmap(black, size, size, 3);
             return new GlyphImage(codePoint, 0f, 0f, advance, bitmap);
@@ -338,6 +393,7 @@ public class Font implements Disposable {
 
             try {
 
+                // msdf_shape_orient_contours(shape);
                 if (msdf_shape_normalize(shape) != MSDF_SUCCESS) return null;
                 msdf_shape_edge_colors_simple(shape, 3.0);
                 // Ink bounds in em (Y-up, origin = pen)
@@ -351,7 +407,7 @@ public class Font implements Disposable {
                 double xMax = bounds.r();
                 double yMax = bounds.t();
                 // Expand to image box: ink + distance-field padding on every side.
-                double padEm = (double) FONT_PADDING / (double) FONT_SIZE;
+                double padEm = (double) MSDF_RANGE / (double) FONT_SIZE;
                 double imageLEm = xMin - padEm;
                 double imageBEm = yMin - padEm;
                 double imageREm = xMax + padEm;
@@ -372,12 +428,15 @@ public class Font implements Disposable {
                 try {
                     // Map image box onto the bitmap: scale em→pixels, translate so
                     // (imageX, imageY) lands on bitmap pixel (0, 0).
-                    double transX = -imageX / (double) FONT_SIZE;
-                    double transY = -imageY / (double) FONT_SIZE;
+                    //double transX = -imageX / (double) FONT_SIZE;
+                    //double transY = -imageY / (double) FONT_SIZE;
+                    double transX = -((double) imageX / (double) FONT_SIZE);
+                    double transY = -((double) imageY / (double) FONT_SIZE);
 
                     MSDFGenTransform transform = MSDFGenTransform.malloc(stack);
                     transform.scale().x(FONT_SIZE).y(FONT_SIZE);
                     transform.translation().x(transX).y(transY);
+
                     transform.distance_mapping().lower(-padEm).upper(padEm);
 
                     if (msdf_generate_msdf(msdfBitmap, shape, transform) != MSDF_SUCCESS) return null;

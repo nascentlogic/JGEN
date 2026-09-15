@@ -194,6 +194,82 @@ public interface Text extends CharSequence, Comparable<CharSequence> {
     }
 
     // =============================================================================
+    // CHARACTER TYPE SEARCH
+    // =============================================================================
+
+    /**
+     * Finds the index of the first printable character at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextPrintable(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isPrintable(get(i))) return i;
+        } return -1;
+    }
+
+    /**
+     * Finds the index of the first graphical (ink) character at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextGraphical(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isGraphical(get(i))) return i;
+        } return -1;
+    }
+
+    /**
+     * Finds the index of the first whitespace character (Space, Tab, Line Feed) at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextWhitespace(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isWhitespace(get(i))) return i;
+        } return -1;
+    }
+
+    /**
+     * Finds the index of the first horizontal whitespace character (Space, Tab) at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextHorizontalWhitespace(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isHorizontalWhitespace(get(i))) return i;
+        } return -1;
+    }
+
+    /**
+     * Finds the index of the first control character (Line Feed, Tab) at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextControl(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isControl(get(i))) return i;
+        } return -1;
+    }
+
+    /**
+     * Finds the index of the first word delimiter (Space, Tab, Line Feed) at or after {@code fromIndex}.
+     * @return index of matching character, or -1 if none found
+     */
+    default int nextWordDelimiter(int fromIndex) {
+        int len = length();
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (isWordDelimiter(get(i))) return i;
+        } return -1;
+    }
+
+    // =============================================================================
     // PREFIX / SUFFIX CHECKS
     // =============================================================================
 
@@ -328,6 +404,52 @@ public interface Text extends CharSequence, Comparable<CharSequence> {
     static boolean isValidInternalFormat(int c) {
         return (c >= SPACE && c <= TILDE) || c == LINE_FEED || c == TAB;
     }
+
+    /**
+     * Printable ASCII range: ' ' (32) through '~' (126).
+     */
+    static boolean isPrintable(byte c) {
+        return c >= SPACE && c <= TILDE;
+    }
+
+    /**
+     * Graphic/Ink character range: '!' (33) through '~' (126).
+     * Excludes Space, Tab, and Line Feed.
+     */
+    static boolean isGraphical(byte c) {
+        return c > SPACE && c <= TILDE;
+    }
+
+    /**
+     * Whitespace characters present in normalized text: Space, Tab, Line Feed.
+     */
+    static boolean isWhitespace(byte c) {
+        return c == SPACE || c == TAB || c == LINE_FEED;
+    }
+
+    /**
+     * Non-breaking horizontal whitespace: Space and Tab.
+     */
+    static boolean isHorizontalWhitespace(byte c) {
+        return c == SPACE || c == TAB;
+    }
+
+    /**
+     * Control characters present in normalized text: Line Feed and Tab.
+     */
+    static boolean isControl(byte c) {
+        return c == LINE_FEED || c == TAB;
+    }
+
+    /**
+     * Checks if character breaks a word (Line Feed, Space, or Tab).
+     */
+    static boolean isWordDelimiter(byte c) {
+        return c == SPACE || c == TAB || c == LINE_FEED;
+    }
+
+
+
 
     static int normalizedLength(CharSequence src) { return normalizedLength(src,0,src.length()); }
     static int normalizedLength(CharSequence src, int srcFrom, int srcTo) {

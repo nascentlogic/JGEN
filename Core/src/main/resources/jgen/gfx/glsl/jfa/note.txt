@@ -1,0 +1,3 @@
+I can't remember why the jfa (Jump Flood Algorithm) files are here.
+I think they are left overs, and the udf files are the ones I'm using.
+Either way, I'll keep them for now.

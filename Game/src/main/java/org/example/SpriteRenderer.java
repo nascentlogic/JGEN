@@ -65,9 +65,9 @@ public class SpriteRenderer implements Disposable {
     private Framebuffer batchBuffer;
 
 
-    public SpriteRenderer(Vector2i resolution, int batchCapacity) throws Exception {
-        batchBuffer = createFramebuffer(resolution.x,resolution.y);
-        JgenMath.screenSpaceMatrix(resolution.x,resolution.y,screenSpaceMatrix);
+    public SpriteRenderer(Vector2i res, int batchCapacity) throws Exception {
+        batchBuffer = createFramebuffer(res.x,res.y);
+        JgenMath.screenSpaceMatrix(res.x,res.y,screenSpaceMatrix);
         ShaderProgram program = ShaderProgram.getProgramByName(PROGRAM_NAME);
         if (program == null) {
             Shader shader = Disk.resourceShader(PROGRAM_NAME,PROGRAM_DIR);

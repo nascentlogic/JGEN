@@ -28,7 +28,7 @@ public class ResourcePath {
      * @throws IOException          if the joined path is blank, malformed, or escapes the root
      * @throws NullPointerException if any segment is {@code null}
      */
-    ResourcePath (String first, String... more) throws IOException {
+    public ResourcePath (String first, String... more) throws IOException {
         Objects.requireNonNull(first,"Null path segment: \"first\".");
         Objects.requireNonNull(more,"Null path varArgs: \"...more\".");
         for (String segment : more) Objects.requireNonNull(segment,"One or more null path segments: \"...more\".");

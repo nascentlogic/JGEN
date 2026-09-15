@@ -91,4 +91,11 @@ public class Shader implements Iterable<Shader.File> {
     public int hashCode() {
         return name.hashCode();
     }
+
+
+    // =============================================================================
+    // SHADER LOADING
+    // =============================================================================
+
+
 }

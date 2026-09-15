@@ -412,6 +412,15 @@ public final class Window {
         return dst.set(gameResolution);
     }
 
+    public int gameResolutionWidth() {
+        return gameResolution.x;
+    }
+
+    public int gameResolutionHeight() {
+        return gameResolution.y;
+    }
+
+
     /**
      * Blits the game frame to the backbuffer, updating the texture's min/mag filters
      * to match the current scaling scenario. Buffer is cleared black beforhand.
@@ -432,6 +441,7 @@ public final class Window {
             int bbH = framebufferRes.y;
             sampleNearest = gameW == bbW && gameH == bbH;
         }
+        frame.bindToSlot(0);
         if (sampleNearest) {
             frame.filterNearest();
         } else{
@@ -577,7 +587,8 @@ public final class Window {
     private void rescaleViewport(Vector2i framebufferRes, Vector2i targetRes, Vector4i dst) {
         if (targetRes == null || targetRes.x == 0 || targetRes.y == 0)
             dst.set(0,0,framebufferRes.x,framebufferRes.y);
-        else { int viewW = framebufferRes.x;
+        else {
+            int viewW = framebufferRes.x;
             int viewH = framebufferRes.y;
             if (viewW * targetRes.y > viewH * targetRes.x) {
                 viewW = (framebufferRes.y * targetRes.x) / targetRes.y;
