@@ -21,7 +21,7 @@ public class UniformBuffer implements Disposable {
      * @param dynamic dynamic / static - draw
      */
     public UniformBuffer(int size, boolean dynamic) {
-        this.handle = Buffers.generateUBO(dynamic,size);
+        this.handle = Buffers.generateBindUBO(dynamic,size);
         this.size = size;
     }
 

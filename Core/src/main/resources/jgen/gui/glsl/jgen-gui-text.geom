@@ -7,11 +7,13 @@ struct TextureRegion {
 };
 
 struct CharData {
-    TextureRegion region;
+    TextureRegion region; // NDC
     vec4 color;
     uint font;
-    float screenPxRange; // Changed from dfPixelRange to actual screen space range
+    float screenPxRange;
     float dfPixelRange;
+    float glow;
+    bool outline;
     bool cursor;
 };
 
@@ -24,21 +26,24 @@ in VSOUT {
 out GSOUT {
     vec2 uv;
     flat vec4 color;
-    flat float screenPxRange; // Pass through
+    flat float screenPxRange;
     flat float dfPixelRange;
+    flat float glow;
     flat uint texSlot;
     flat bool cursor;
+    flat bool ouulined;
 } gsOut;
 
 void main() {
     CharData ch = gsIn[0].character;
     // Pass flat attributes constant across all 4 vertices
-    gsOut.color        = ch.color;
+    gsOut.color         = ch.color;
     gsOut.screenPxRange = ch.screenPxRange;
-    gsOut.dfPixelRange = ch.dfPixelRange;
-    gsOut.texSlot      = ch.font;
-    gsOut.cursor       = ch.cursor;
-
+    gsOut.dfPixelRange  = ch.dfPixelRange;
+    gsOut.glow          = ch.glow;
+    gsOut.texSlot       = ch.font;
+    gsOut.cursor        = ch.cursor;
+    gsOut.ouulined      = ch.outline;
     // Emit the 4 vertices in triangle_strip order (BL, BR, TL, TR)
     for (int i = 0; i < 4; i++) {
         gl_Position = vec4(ch.region.pos[i], 0.0, 1.0);

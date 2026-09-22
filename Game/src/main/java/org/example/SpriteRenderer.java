@@ -82,7 +82,7 @@ public class SpriteRenderer implements Disposable {
         int bufferSizeFloat = limit * SPRITE_SIZE_FLOAT;
         vertices = MemoryUtil.memAllocFloat(bufferSizeFloat);
         vao = Buffers.generateBindVAO();
-        ebo = Buffers.generateQuadEBO(limit);
+        ebo = Buffers.generateBindQuadEBO(limit);
         vbo = Buffers.generateVBO(GL_DYNAMIC_DRAW, bufferSizeFloat * Float.BYTES);
         int pointer = 0;
         int vertexSize = VERTEX_SIZE_FLOAT * Float.BYTES;

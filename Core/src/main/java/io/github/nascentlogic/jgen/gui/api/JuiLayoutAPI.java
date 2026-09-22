@@ -1,20 +1,34 @@
-package io.github.nascentlogic.jgen.gui.adt;
+package io.github.nascentlogic.jgen.gui.api;
 
-import io.github.nascentlogic.jgen.gui.neo.Container;
+import io.github.nascentlogic.jgen.gui.util.Axis;
+import io.github.nascentlogic.jgen.gui.util.Container;
 import org.joml.primitives.Rectanglef;
+
+import java.util.Objects;
 
 /**
  * F.Dahl, 9/14/2026
  */
 public interface JuiLayoutAPI {
 
-    /** Semi-arbitrary stack depth limit */
-    int CONTAINER_STACK_CAP = 128;
+
 
     // =============================================================================
     // ABSOLUTE / FIXED SIZE CONTAINER
     // =============================================================================
 
+    /** {@link #pushContainerAbsolute(float, float, float, float, float, Axis, boolean)} */
+    default void pushContainerAbsolute(Rectanglef bounds, float spacing, Axis axis, boolean inverseLayout) {
+        pushContainerAbsolute(bounds.minX,bounds.minY,bounds.lengthX(),bounds.lengthY(),spacing,axis,inverseLayout);
+    }
+    /** {@link #pushContainerAbsolute(float, float, float, float, float, Axis, boolean)} */
+    default void pushContainerAbsolute(Rectanglef bounds, float spacing, Axis axis) {
+        pushContainerAbsolute(bounds.minX,bounds.minY,bounds.lengthX(),bounds.lengthY(),spacing,axis,false);
+    }
+    /** {@link #pushContainerAbsolute(float, float, float, float, float, Axis, boolean)} */
+    default void pushContainerAbsolute(Rectanglef bounds, Axis axis) {
+        pushContainerAbsolute(bounds.minX,bounds.minY,bounds.lengthX(),bounds.lengthY(),0,axis,false);
+    }
     /** {@link #pushContainerAbsolute(float, float, float, float, float, Axis, boolean)} */
     default void pushContainerAbsolute(float x, float y, float w, float h, Axis axis) { pushContainerAbsolute(x,y,w,h,0,axis,false); }
     /** {@link #pushContainerAbsolute(float, float, float, float, float, Axis, boolean)} */
@@ -92,6 +106,18 @@ public interface JuiLayoutAPI {
      * will simply over-allocate. Which is fine.
      * The container content size is not actually modified before it "pops/ends" */
     Rectanglef allocateSpace(float size, Rectanglef dst);
+    /** Allocate {@code count} fixed size space on the current container.
+     * size is allocated along the containers axis.
+     * using up all space across the containers cross-axis.
+     * if the size is greater than the containers remaining space, it
+     * will simply over-allocate. Which is fine.
+     * The container content size is not actually modified before it "pops/ends" */
+    default Rectanglef[] allocateSpace(float size, Rectanglef[] dst, int count) {
+        Objects.checkFromIndexSize(0, count, dst.length);
+        for (int i = 0; i < count; i++) {
+            allocateSpace(size, dst[i]);
+        } return dst;
+    }
     /** Allocate size equal the remaining space of the current container.
      * size is allocated along the containers axis.
      * using up all space across the containers cross-axis.

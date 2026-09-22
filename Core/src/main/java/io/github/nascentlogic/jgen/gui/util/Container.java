@@ -1,6 +1,5 @@
-package io.github.nascentlogic.jgen.gui.neo;
+package io.github.nascentlogic.jgen.gui.util;
 
-import io.github.nascentlogic.jgen.gui.adt.Axis;
 import org.joml.primitives.Rectanglef;
 
 /**

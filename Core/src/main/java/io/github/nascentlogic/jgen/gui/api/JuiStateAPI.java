@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.gui.adt;
+package io.github.nascentlogic.jgen.gui.api;
 
 import io.github.nascentlogic.jgen.Mouse;
 import org.joml.*;
@@ -12,7 +12,7 @@ import java.util.function.Supplier;
  */
 public interface JuiStateAPI {
 
-    int ID_STACK_CAP        = 128; // arbitrary
+
     int NULL                = 0;
     int DRAG_THRESHOLD      = 4;
 
@@ -257,14 +257,14 @@ public interface JuiStateAPI {
     float getFloat(int id, float defaultValue);
     double getDouble(int id, double defaultValue);
     boolean getBool(int id, boolean defaultValue);
-    Vector2f getVec2f(int id, Vector2f defaultValue);
-    Vector3f getVec3f(int id, Vector3f defaultValue);
-    Vector4f getVec4f(int id, Vector4f defaultValue);
-    Vector2i getVec2i(int id, Vector2i defaultValue);
-    Vector3i getVec3i(int id, Vector3i defaultValue);
-    Vector4i getVec4i(int id, Vector4i defaultValue);
-    Rectanglef getRectf(int id, Rectanglef defaultValue);
-    Rectanglei getRecti(int id, Rectanglei defaultValue);
+    Vector2f getVec2f(int id, float x, float y);
+    Vector3f getVec3f(int id, float x, float y, float z);
+    Vector4f getVec4f(int id, float x, float y, float z, float w);
+    Vector2i getVec2i(int id, int x, int y);
+    Vector3i getVec3i(int id, int x, int y, int z);
+    Vector4i getVec4i(int id, int x, int y, int z, int w);
+    Rectanglef getRectf(int id, float minX, float minY, float maxX, float maxY);
+    Rectanglei getRecti(int id, int minX, int minY, int maxX, int maxY);
     <T> T getObj(int id, Class<T> clazz, Supplier<T> supplier);
     void persistentPut(int id, Object object);
     void persistentRemove(int id);

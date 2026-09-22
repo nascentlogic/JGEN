@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.text;
+package io.github.nascentlogic.jgen.gui.text;
 
 /**
  * F.Dahl, 8/15/2026
@@ -26,6 +26,7 @@ public abstract class ManagedText extends ManagedBuffer implements Text {
      * AND {@code this} is not a {@link TextBuffer}.
      */
     public abstract int set(CharSequence str);
+
 
     /**
      * Clears the buffer, leaving {@link #length()} {@code == 0} post operation.<p>

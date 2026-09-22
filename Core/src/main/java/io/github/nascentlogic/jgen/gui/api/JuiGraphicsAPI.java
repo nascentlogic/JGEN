@@ -1,10 +1,10 @@
-package io.github.nascentlogic.jgen.gui.adt;
+package io.github.nascentlogic.jgen.gui.api;
 
 import io.github.nascentlogic.jgen.gfx.Color;
 import io.github.nascentlogic.jgen.gfx.Texture;
 import io.github.nascentlogic.jgen.gui.Font;
-import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.text.Text;
+import io.github.nascentlogic.jgen.gui.text.Text;
+import io.github.nascentlogic.jgen.gui.util.TextAlignment;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import org.joml.Vector4f;
 import org.joml.primitives.Rectanglef;
@@ -15,36 +15,9 @@ import java.util.List;
 /**
  * F.Dahl, 9/11/2026
  */
-public interface JuiGraphics extends Disposable {
+public interface JuiGraphicsAPI extends Disposable {
 
-    int SCISSOR_STACK_CAP = 64;
-    /* ----------------------------------------
-     * vertex: | pos | uv | color | id | data |
-     * ----------------------------------------
-     * size:   | 2   | 2  | 1     | 1  | 1    |
-     * ----------------------------------------*/
-    int SPRITE_TEXTURE_SLOTS = 8;
-    int SPRITE_TEXTURE_UNIT_OFFSET = 5;
-    int SPRITE_BATCH_CAP = 512;
-    int SPRITE_VERTEX_SIZE_FLOAT = 7;
-    int SPRITE_VERTEX_SIZE_BYTES = SPRITE_VERTEX_SIZE_FLOAT * Float.BYTES;
-    int SPRITE_SIZE_FLOAT = SPRITE_VERTEX_SIZE_FLOAT * 4;
-    int SPRITE_BATCH_SIZE_FLOAT = SPRITE_BATCH_CAP * SPRITE_SIZE_FLOAT;
-    int SPRITE_BATCH_SIZE_BYTES = SPRITE_BATCH_SIZE_FLOAT * Float.BYTES;
-    /* ------------------------------
-     * vertex: | pos | color | data |
-     * ------------------------------
-     * size:   | 2   | 1     | 1    |
-     * ------------------------------*/
-    int TEXT_BLOCK_BINDING = 8;
-    int TEXT_BATCH_CAP = 1024;
-    int TEXT_VERTEX_SIZE_FLOAT = 4;
-    int TEXT_BATCH_SIZE_FLOAT = TEXT_BATCH_CAP * TEXT_VERTEX_SIZE_FLOAT;
-    int TEXT_BATCH_SIZE_BYTES = TEXT_BATCH_SIZE_FLOAT * Float.BYTES;
 
-    String SHADER_RESOURCE_DIR = "jgen/gui/glsl";
-    String SPRITE_PROGRAM_NAME = "jgen-gui-sprite";
-    String TEXT_PROGRAM_NAME = "jgen-gui-text";
 
 
     /**
@@ -56,7 +29,9 @@ public interface JuiGraphics extends Disposable {
      * @param id 32-bit id associated with the sprite
      * @param transparentID if true the sprite will output the id even if sprite is stansparent (default == true)
      */
-    void drawRectRot(Rectanglef rect, Color color, float glow, float rot, int id, boolean transparentID);
+    default void drawRectRot(Rectanglef rect, Color color, float glow, float rot, int id, boolean transparentID) {
+        drawSpriteSink(null,rect.minX,rect.minY,rect.maxX,rect.maxY,0,0,1,1,color,glow,rot,id,transparentID,false);
+    }
 
     /**
      * Rendeer a colored quad in screen space.
@@ -70,10 +45,11 @@ public interface JuiGraphics extends Disposable {
      * @param id 32-bit id associated with the sprite
      * @param transparentID if true the sprite will output the id even if sprite is stansparent (default == true)
      */
-    void drawRectRot(float x, float y, float w, float h, Color color, float glow, float rot, int id, boolean transparentID);
+    default void drawRectRot(float x, float y, float w, float h, Color color, float glow, float rot, int id, boolean transparentID) {
+        drawSpriteSink(null,x,y,x + w, y + h,0,0,1,1, color, glow, rot,  id, transparentID, false);
+    }
 
     /**
-     * SINK<p>
      * Rendeer a textured quad in screen space.
      * @param texture texture or null
      * @param rect sprite transform on screen
@@ -89,10 +65,11 @@ public interface JuiGraphics extends Disposable {
      * @param pixelAAA Pixel-Art Anti-Aliasing. Useful for reendering upscaled "pixelated" sprites.
      *                Only works with bi-linear texture sampling (default == false)
      */
-    void drawSpriteRot(Texture texture, Rectanglef rect, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA);
+    default void drawSpriteRot(Texture texture, Rectanglef rect, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA) {
+        drawSpriteSink(texture,rect.minX,rect.minY,rect.maxX,rect.maxY,u,v,u2,v2,color,glow,rot,id,transparentID,pixelAAA);
+    }
 
     /**
-     * SINK<p>
      * Rendeer a textured quad in screen space.
      * @param texture texture or null
      * @param x sprite botom left position on screen
@@ -111,7 +88,12 @@ public interface JuiGraphics extends Disposable {
      * @param pixelAAA Pixel-Art Anti-Aliasing. Useful for reendering upscaled "pixelated" sprites.
      *                Only works with bi-linear texture sampling (default == false)
      */
-    void drawSpriteRot(Texture texture, float x, float y, float w, float h, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA);
+    default void drawSpriteRot(Texture texture, float x, float y, float w, float h, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA) {
+        drawSpriteSink(texture, x, y, x + w, y + h, u, v, u2, v2, color, glow, rot, id, transparentID, pixelAAA);
+    }
+
+    void drawSpriteSink(Texture texture, float x1, float y1, float x2, float y2, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA);
+
 
     /**
      * Draw generic single line of text from absolute pen position.
@@ -137,6 +119,56 @@ public interface JuiGraphics extends Disposable {
      * @param outlined if the text should be rendered with outlines
      */
     void drawLabel(CharSequence text, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment);
+
+    /**
+     * Draw integer digit from absolute pen position.
+     * @param value integer
+     * @param penX start x position of pen
+     * @param penY start y position of pen
+     * @param font font index (bond font slot)
+     * @param size target font size (0 - 255)
+     * @param color color of text
+     * @param glow normalized strength of the color (0: color, 1: color + color + glow * MAX_GLOW)
+     * @param outlined if the text should be rendered with outlines
+     */
+    void drawLabelInt(int value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined);
+
+    /**
+     * Draw integer digit inside a box
+     * @param value integer
+     * @param bounds bounds of the line. text will be centered vertically and alligned horizontally according to the text allignment.
+     * @param font font index (bond font slot)
+     * @param size target font size (0 - 255)
+     * @param color color of text
+     * @param glow normalized strength of the color (0: color, 1: color + color + glow * MAX_GLOW)
+     * @param outlined if the text should be rendered with outlines
+     */
+    void drawLabelInt(int value, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment);
+
+    /**
+     * Draw floating point digit from absolute pen position.
+     * @param value float / double
+     * @param penX start x position of pen
+     * @param penY start y position of pen
+     * @param font font index (bond font slot)
+     * @param size target font size (0 - 255)
+     * @param color color of text
+     * @param glow normalized strength of the color (0: color, 1: color + color + glow * MAX_GLOW)
+     * @param outlined if the text should be rendered with outlines
+     */
+    void drawLabelFloat(double value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined);
+
+    /**
+     * Draw floating point digit inside a box
+     * @param value float / double
+     * @param bounds bounds of the line. text will be centered vertically and alligned horizontally according to the text allignment.
+     * @param font font index (bond font slot)
+     * @param size target font size (0 - 255)
+     * @param color color of text
+     * @param glow normalized strength of the color (0: color, 1: color + color + glow * MAX_GLOW)
+     * @param outlined if the text should be rendered with outlines
+     */
+    void drawLabelFloat(double value, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment);
 
     /**
      * Draw unbounded left alligned text from absolute pen position.
@@ -341,6 +373,9 @@ public interface JuiGraphics extends Disposable {
         drawSpriteRot(texture,x,y,w,h,u,v,u2,v2,color,glow,rot,id,transparentID,false);
     }
 
+    // =============================================================================
+    // COLORED QUADS
+    // =============================================================================
 
     /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
     default void drawRect(Rectanglef rect, Color color) {
@@ -399,6 +434,9 @@ public interface JuiGraphics extends Disposable {
         drawRectRot(x,y,w,h,color,glow,rot,id,true);
     }
 
+    // =============================================================================
+    // TEXT
+    // =============================================================================
 
     /** {@link #drawLabel(CharSequence, float, float, int, int, Color, float, boolean)}*/
     default void drawLabel(CharSequence text, float penX, float penY, int font, int size, Color color) {
@@ -420,6 +458,49 @@ public interface JuiGraphics extends Disposable {
     default void drawLabel(CharSequence text, Rectanglef bounds, int font, int size, Color color, boolean outlined, TextAlignment alignment) {
         drawLabel(text,bounds,font,size,color,0,outlined,alignment);
     }
+
+    /** {@link #drawLabelInt(int, float, float, int, int, Color, float, boolean)}*/
+    default void drawLabelInt(int value, float penX, float penY, int font, int size, Color color) {
+        drawLabelInt(value,penX,penY,font,size,color,0,false);
+    }
+    /** {@link #drawLabelInt(int, float, float, int, int, Color, float, boolean)}*/
+    default void drawLabelInt(int value, float penX, float penY, int font, int size, Color color, boolean outlined) {
+        drawLabelInt(value,penX,penY,font,size,color,0,outlined);
+    }
+    /** {@link #drawLabelInt(int, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelInt(int value, Rectanglef bounds, int font, int size, Color color) {
+        drawLabelInt(value,bounds,font,size,color,0,false,TextAlignment.LEFT);
+    }
+    /** {@link #drawLabelInt(int, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelInt(int value, Rectanglef bounds, int font, int size, Color color, TextAlignment alignment) {
+        drawLabelInt(value,bounds,font,size,color,0,false,alignment);
+    }
+    /** {@link #drawLabelInt(int, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelInt(int value, Rectanglef bounds, int font, int size, Color color, boolean outlined, TextAlignment alignment) {
+        drawLabelInt(value,bounds,font,size,color,0,outlined,alignment);
+    }
+
+    /** {@link #drawLabelFloat(double, float, float, int, int, Color, float, boolean)}*/
+    default void drawLabelFloat(double value, float penX, float penY, int font, int size, Color color) {
+        drawLabelFloat(value,penX,penY,font,size,color,0,false);
+    }
+    /** {@link #drawLabelFloat(double, float, float, int, int, Color, float, boolean)}*/
+    default void drawLabelFloat(double value, float penX, float penY, int font, int size, Color color, boolean outlined) {
+        drawLabelFloat(value,penX,penY,font,size,color,0,outlined);
+    }
+    /** {@link #drawLabelFloat(double, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelFloat(double value, Rectanglef bounds, int font, int size, Color color) {
+        drawLabelFloat(value,bounds,font,size,color,0,false,TextAlignment.LEFT);
+    }
+    /** {@link #drawLabelFloat(double, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelFloat(double value, Rectanglef bounds, int font, int size, Color color, TextAlignment alignment) {
+        drawLabelFloat(value,bounds,font,size,color,0,false,alignment);
+    }
+    /** {@link #drawLabelFloat(double, Rectanglef, int, int, Color, float, boolean, TextAlignment)}*/
+    default void drawLabelFloat(double value, Rectanglef bounds, int font, int size, Color color, boolean outlined, TextAlignment alignment) {
+        drawLabelFloat(value,bounds,font,size,color,0,outlined,alignment);
+    }
+
     /** {@link #drawText(Text, float, float, int, int, Color, float, boolean)}*/
     default void drawText(Text text, float penX, float penY, int font, int size, Color color) {
         drawText(text,penX,penY,font,size,color,0,false);
@@ -442,11 +523,15 @@ public interface JuiGraphics extends Disposable {
     }
 
 
+    int resolutionWidth();
+    int resolutionHeight();
 
-    /** Load entire directory under: {@link Disk#gameRootDirectory()}
-     * If a named font already exist it will not be replaced.
-     * Fonts are freed automaically on exit */
-    void fontLoadLibrary(String first, String... more);
+    int debugDrawCalls();
+    int debugSpritesRendered();
+    int debugCharsRendered();
+    int debugDeferredCallsMax();
+
+
     /** Adds a font to stored fonts if no font already exist with the same name.
      * @return false if a font already exist under the same name.
      * Added Fonts are freed automaically on gui exit */
@@ -455,7 +540,7 @@ public interface JuiGraphics extends Disposable {
      * @param index 0 to 4 (index wraps)
      * @param name name of the font (file name without the .ttf extension)
      * @return true if the font is a stored font (and therefore was bound)*/
-    boolean fontBind(int index, String name);
+    boolean fontBind(String name, int index);
     /** @param name name of the font (file name without the .ttf extension)
      * @return true if font is stored in library */
     boolean fontIsStored(String name);
@@ -473,6 +558,9 @@ public interface JuiGraphics extends Disposable {
     int fontNumStored();
 
 
+
+
+
     /** Push a glScissor rectangle on the stack. Geometry will be culled outside it's bounds.
      * Does not take previously pushed rectangles into accont (no intersection with previous). */
     void scissorPush(float x1, float y1, float x2, float y2);
@@ -487,6 +575,21 @@ public interface JuiGraphics extends Disposable {
     void scissorPop();
     /** Number of scissor rectangles currently on the stack */
     int scissorStackSize();
+
+
+    /** Enables deferred rendering.
+     * Future draw calls are queued instead of rendered immediatly.
+     * Calling: {@link #deferredFlush()} will flush the current commands
+     * to the appropriate batches. Call {@link #deferredDisable()} to return
+     * to "immediate mode" rendering.<p>
+     * Note: disable will not flush the deferred calls. */
+    void deferredEnable();
+    /** {@link #deferredEnable()} */
+    void deferredDisable();
+    /** {@link #deferredEnable()} */
+    void deferredFlush();
+
+
 
 
 }

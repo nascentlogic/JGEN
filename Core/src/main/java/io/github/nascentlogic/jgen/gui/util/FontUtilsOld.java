@@ -1,8 +1,7 @@
 package io.github.nascentlogic.jgen.gui.util;
 
 import io.github.nascentlogic.jgen.gui.Font;
-import io.github.nascentlogic.jgen.gui.adt.TextAlignment;
-import io.github.nascentlogic.jgen.text.Text;
+import io.github.nascentlogic.jgen.gui.text.Text;
 import org.joml.Vector2f;
 
 /**

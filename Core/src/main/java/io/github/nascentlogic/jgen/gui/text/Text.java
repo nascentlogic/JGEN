@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.text;
+package io.github.nascentlogic.jgen.gui.text;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
@@ -514,6 +514,137 @@ public interface Text extends CharSequence, Comparable<CharSequence> {
     static boolean regionOverlap(int pos1, int len1, int pos2, int len2) {
         return rangeOverlap(pos1, pos1 + len1, pos2, pos2 + len2);
     }
+
+
+    int MAX_INT_DIGITS = 11;
+    int MAX_FLOAT_DIGITS = 16;
+
+    /**
+     * Converts an int value into 7-bit ASCII bytes inside a destination array.
+     * Optimized for high-performance tight rendering loops.
+     *
+     * @param value    The int value to format.
+     * @param dst      Destination byte array.
+     * @param dstFrom  Starting index position in the destination array.
+     * @return         The total number of characters written.
+     *
+     * Documentation:
+     * - Max characters inserted: 11
+     * - Min value: -2147483648
+     * - Max value:  2147483647
+     * - Caller must ensure dstFrom + 11 <= dst.length
+     */
+    static int insertIntDigits(int value, byte[] dst, int dstFrom) {
+        if (value == 0) {
+            dst[dstFrom] = '0';
+            return 1;
+        }
+        long v = value;
+        int pos = dstFrom;
+        if (v < 0){
+            v = -v;
+            dst[pos++] = '-';
+        }
+        int start = pos;
+        while (v > 0) {
+            dst[pos++] = (byte) ('0' + (int)(v % 10));
+            v /= 10;
+        }
+        for (int i = start, j = pos - 1; i < j; i++, j--) {
+            byte tmp = dst[i];
+            dst[i] = dst[j];
+            dst[j] = tmp;
+        } return pos - dstFrom;
+    }
+
+    int[] POW_10 = {1, 10, 100, 1000, 10000, 100000, 1000000};
+
+    /**
+     * Converts a floating point value into 7-bit ASCII bytes inside a destination array.
+     * Optimized for high-performance tight rendering loops.
+     *
+     * @param value     The floating point value to format.
+     * @param decimals  Number of decimal places (clamped between 0 and 6).
+     * @param dst      Destination byte array.
+     * @param dstFrom    Starting index position in the destination array.
+     * @return          The total number of characters written.
+     *
+     * Documentation:
+     * - Max characters inserted: 16
+     * - Min value: -99_999_999.0 (or -Infinity)
+     * - Max value: 99_999_999.0 (or Infinity)
+     */
+    static int insertFloatDigits(double value, int decimals, byte[] dst, int dstFrom) {
+        if (Double.isNaN(value)) {
+            dst[dstFrom]     = 'N';
+            dst[dstFrom + 1] = 'a';
+            dst[dstFrom + 2] = 'N';
+            return 3;
+        }
+        if (Double.isInfinite(value)) {
+            int pos = dstFrom;
+            if (value < 0f) dst[pos++] = '-';
+            dst[pos++] = 'I'; dst[pos++] = 'n'; dst[pos++] = 'f';
+            dst[pos++] = 'i'; dst[pos++] = 'n'; dst[pos++] = 'i';
+            dst[pos++] = 't'; dst[pos++] = 'y';
+            return pos - dstFrom;
+        }
+
+        boolean neg = value < 0f;
+        double v = neg ? -value : value;
+
+        if (v >= 99_999_999.0) {
+            int pos = dstFrom;
+            if (neg) dst[pos++] = '-';
+            dst[pos++] = '9'; dst[pos++] = '9'; dst[pos++] = '9'; dst[pos++] = '9';
+            dst[pos++] = '9'; dst[pos++] = '9'; dst[pos++] = '9'; dst[pos++] = '9';
+            return pos - dstFrom;
+        }
+
+        if (decimals < 0) decimals = 0;
+        if (decimals > 6) decimals = 6;
+        // =========================================================================
+        // CHANGE APPLIED: Scale First, Round Once
+        // Previously, we did: int intPart = (int) v; double frac = v - intPart;
+        // That subtraction introduced floating-point drift.
+        // Now, we scale the entire number first, round globally, and split cleanly
+        // using integer division and modulo.
+        // =========================================================================
+        int scale = POW_10[decimals];
+        long totalScaled = Math.round(v * scale);
+        int intPart = (int) (totalScaled / scale);
+        int fracInt = (int) (totalScaled % scale);
+        // =========================================================================
+        int pos = dstFrom;
+        if (neg) dst[pos++] = '-';
+
+        // Integer digits
+        if (intPart == 0) {
+            dst[pos++] = '0';
+        } else {
+            int start = pos;
+            int tempInt = intPart;
+            while (tempInt > 0) {
+                dst[pos++] = (byte) ('0' + (tempInt % 10));
+                tempInt /= 10;
+            }
+            for (int i = start, j = pos - 1; i < j; i++, j--) {
+                byte tmp = dst[i];
+                dst[i] = dst[j];
+                dst[j] = tmp;
+            }
+        }
+        // Fractional digits
+        if (decimals > 0) {
+            dst[pos++] = '.';
+            for (int i = 0; i < decimals; i++) {
+                dst[pos + decimals - 1 - i] = (byte) ('0' + (fracInt % 10));
+                fracInt /= 10;
+            } pos += decimals;
+        }
+        return pos - dstFrom;
+    }
+
 
     // =============================================================================
     // Classes

@@ -659,11 +659,11 @@ public class ShaderProgram implements Disposable {
                 ShaderProgram.useNone();
             } catch (Exception e) { throw new RuntimeException(e);}
 
-            vbo = Buffers.generateVBO(GL_DYNAMIC_DRAW, 16 * Float.BYTES);
-            ebo = Buffers.generateQuadEBO(1);
+
             vao = Buffers.generateBindVAO();
-            Buffers.bindEBO(ebo);
-            Buffers.bindVBO(vbo);
+            ebo = Buffers.generateBindQuadEBO(1);
+            vbo = Buffers.generateBindVBO(GL_DYNAMIC_DRAW, 16 * Float.BYTES);
+
             int stride = 4 * Float.BYTES;
             glVertexAttribPointer(0, 2, GL_FLOAT, false, stride, 0);
             glVertexAttribPointer(1, 2, GL_FLOAT, false, stride, 2 * Float.BYTES);

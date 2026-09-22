@@ -1,7 +1,6 @@
 package io.github.nascentlogic.jgen;
 
 import io.github.nascentlogic.jgen.utils.IntQueue;
-import io.github.nascentlogic.jgen.text.TextProcessor;
 
 import java.util.Objects;
 
@@ -12,8 +11,13 @@ import static org.lwjgl.glfw.GLFW.*;
  */
 public final class Keyboard {
 
+    public interface InputStream {
+        void onCharType(byte c);
+        void onKeyEvent(int key, int mods, int action);
+    }
+
     public static final int MAX_PROCESSORS = 16;
-    private final TextProcessor[] textProcessors = new TextProcessor[MAX_PROCESSORS];
+    private final InputStream[] textProcessors = new InputStream[MAX_PROCESSORS];
     private int processorCount = 0;
 
     private final IntQueue queuedKeys = new IntQueue(48);       // queued key events
@@ -116,7 +120,7 @@ public final class Keyboard {
         }
     }
 
-    public void addTextProcessor(TextProcessor processor) {
+    public void addTextProcessor(InputStream processor) {
         Objects.requireNonNull(processor, "processor cannot be null");
         for (int i = 0; i < processorCount; i++) {
             if (textProcessors[i] == processor) return;
@@ -125,7 +129,7 @@ public final class Keyboard {
         } textProcessors[processorCount++] = processor;
     }
 
-    public boolean removeTextProcessor(TextProcessor processor) {
+    public boolean removeTextProcessor(InputStream processor) {
         Objects.requireNonNull(processor, "processor cannot be null");
         for (int i = 0; i < processorCount; i++) {
             if (textProcessors[i] == processor) {

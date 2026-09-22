@@ -9,13 +9,18 @@ public class LayoutUtils {
 
 
 
-
-
-    public static Rectanglef stretch(Rectanglef target, Rectanglef bounds) {
-        return target.set(bounds);
+    public static Rectanglef transform(Rectanglef start, Rectanglef end, float lerpFactor, Rectanglef dst) {
+        if (lerpFactor <= 0.0f) return dst.set(start);
+        if (lerpFactor >= 1.0f) return dst.set(end);
+        dst.minX = start.minX + (end.minX - start.minX) * lerpFactor;
+        dst.minY = start.minY + (end.minY - start.minY) * lerpFactor;
+        dst.maxX = start.maxX + (end.maxX - start.maxX) * lerpFactor;
+        dst.maxY = start.maxY + (end.maxY - start.maxY) * lerpFactor;
+        return dst;
     }
 
-    public static Rectanglef centerOrFit(Rectanglef target, Rectanglef bounds) {
+
+    public static Rectanglef centerOrFit(Rectanglef bounds, Rectanglef target) {
         float cW = target.lengthX();
         float cH = target.lengthY();
         float pW = bounds.lengthX();
@@ -28,10 +33,10 @@ public class LayoutUtils {
             target.maxX = target.minX + cW;
             target.maxY = target.minY + cH;
             return target;
-        } return fit(target, bounds);
+        } return fit(bounds, target);
     }
 
-    public static Rectanglef fit(Rectanglef target, Rectanglef bounds) {
+    public static Rectanglef fit(Rectanglef bounds, Rectanglef target) {
         float cW = target.lengthX();
         float cH = target.lengthY();
         if (cW <= 0f || cH <= 0f) {
@@ -61,26 +66,26 @@ public class LayoutUtils {
      * 1. If bounds is smaller than target in an axis -> Center along that axis.
      * 2. If target is outside bounds in an axis  -> Translate by shortest distance to snap back in.
      */
-    public static Rectanglef confine(Rectanglef target, Rectanglef bounds) {
+    public static Rectanglef confine(float minX, float minY, float maxX, float maxY, Rectanglef target) {
         float tW = target.lengthX();
         float tH = target.lengthY();
-        float bW = bounds.lengthX();
-        float bH = bounds.lengthY();
+        float bW = maxX - minX;
+        float bH = maxY - minY;
         float newMinX = target.minX;
         float newMinY = target.minY;
         if (tW >= bW) {
-            newMinX = bounds.minX + (bW - tW) * 0.5f;
-        } else if (target.minX < bounds.minX) {
-            newMinX = bounds.minX;
-        } else if (target.maxX > bounds.maxX) {
-            newMinX = bounds.maxX - tW;
+            newMinX = minX + (bW - tW) * 0.5f;
+        } else if (target.minX < minX) {
+            newMinX = minX;
+        } else if (target.maxX > maxX) {
+            newMinX = maxX - tW;
         }
         if (tH >= bH) {
-            newMinY = bounds.minY + (bH - tH) * 0.5f;
-        } else if (target.minY < bounds.minY) {
-            newMinY = bounds.minY;
-        } else if (target.maxY > bounds.maxY) {
-            newMinY = bounds.maxY - tH;
+            newMinY = minY + (bH - tH) * 0.5f;
+        } else if (target.minY < minY) {
+            newMinY = minY;
+        } else if (target.maxY > maxY) {
+            newMinY = maxY - tH;
         }
         target.minX = newMinX;
         target.minY = newMinY;
@@ -88,6 +93,18 @@ public class LayoutUtils {
         target.maxY = newMinY + tH;
         return target;
     }
+
+    /**
+     * Constrains target to stay inside bounds without modifying target's size.
+     * Useful for keeping draggable windows and UI elements inside screen boundaries.
+     * Strategy:
+     * 1. If bounds is smaller than target in an axis -> Center along that axis.
+     * 2. If target is outside bounds in an axis  -> Translate by shortest distance to snap back in.
+     */
+    public static Rectanglef confine(Rectanglef bounds, Rectanglef target) {
+        return confine(bounds.minX,bounds.minY,bounds.maxX,bounds.maxY,target);
+    }
+
 
     public static Rectanglef pad(Rectanglef target, float p) { return pad(target,p,p,p,p); }
     public static Rectanglef pad(Rectanglef target, float v, float h) { return pad(target,v,h,v,h); }
@@ -98,6 +115,113 @@ public class LayoutUtils {
         target.maxY -= t;
         return target;
     }
+
+
+    public static Rectanglef borderTop(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        dst.minX = bounds.minX;
+        dst.maxX = bounds.maxX;
+        if (extrude) {
+            dst.minY = bounds.maxY;
+            dst.maxY = bounds.maxY + thickness;
+        } else {
+            dst.minY = bounds.maxY - thickness;
+            dst.maxY = bounds.maxY;
+        } return dst;
+    }
+
+    public static Rectanglef borderRight(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        dst.minY = bounds.minY;
+        dst.maxY = bounds.maxY;
+        if (extrude) {
+            dst.minX = bounds.maxX;
+            dst.maxX = bounds.maxX + thickness;
+        } else {
+            dst.minX = bounds.maxX - thickness;
+            dst.maxX = bounds.maxX;
+        } return dst;
+    }
+
+    public static Rectanglef borderBottom(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        dst.minX = bounds.minX;
+        dst.maxX = bounds.maxX;
+        if (extrude) {
+            dst.minY = bounds.minY - thickness;
+            dst.maxY = bounds.minY;
+        } else {
+            dst.minY = bounds.minY;
+            dst.maxY = bounds.minY + thickness;
+        } return dst;
+    }
+
+
+    public static Rectanglef borderLeft(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        dst.minY = bounds.minY;
+        dst.maxY = bounds.maxY;
+        if (extrude) {
+            dst.minX = bounds.minX - thickness;
+            dst.maxX = bounds.minX;
+        } else {
+            dst.minX = bounds.minX;
+            dst.maxX = bounds.minX + thickness;
+        } return dst;
+    }
+
+    public static Rectanglef borderTopRight(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        if (extrude) {
+            dst.minX = bounds.maxX;
+            dst.maxX = bounds.maxX + thickness;
+            dst.minY = bounds.maxY;
+            dst.maxY = bounds.maxY + thickness;
+        } else {
+            dst.minX = bounds.maxX - thickness;
+            dst.maxX = bounds.maxX;
+            dst.minY = bounds.maxY - thickness;
+            dst.maxY = bounds.maxY;
+        } return dst;
+    }
+
+    public static Rectanglef borderBottomRight(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        if (extrude) {
+            dst.minX = bounds.maxX;
+            dst.maxX = bounds.maxX + thickness;
+            dst.minY = bounds.minY - thickness;
+            dst.maxY = bounds.minY;
+        } else {
+            dst.minX = bounds.maxX - thickness;
+            dst.maxX = bounds.maxX;
+            dst.minY = bounds.minY;
+            dst.maxY = bounds.minY + thickness;
+        } return dst;
+    }
+
+    public static Rectanglef borderBottomLeft(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        if (extrude) {
+            dst.minX = bounds.minX - thickness;
+            dst.maxX = bounds.minX;
+            dst.minY = bounds.minY - thickness;
+            dst.maxY = bounds.minY;
+        } else {
+            dst.minX = bounds.minX;
+            dst.maxX = bounds.minX + thickness;
+            dst.minY = bounds.minY;
+            dst.maxY = bounds.minY + thickness;
+        } return dst;
+    }
+
+    public static Rectanglef borderTopLeft(Rectanglef bounds, Rectanglef dst, float thickness, boolean extrude) {
+        if (extrude) {
+            dst.minX = bounds.minX - thickness;
+            dst.maxX = bounds.minX;
+            dst.minY = bounds.maxY;
+            dst.maxY = bounds.maxY + thickness;
+        } else {
+            dst.minX = bounds.minX;
+            dst.maxX = bounds.minX + thickness;
+            dst.minY = bounds.maxY - thickness;
+            dst.maxY = bounds.maxY;
+        } return dst;
+    }
+
 
 
     /**

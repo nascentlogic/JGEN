@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.text;
+package io.github.nascentlogic.jgen.gui.text;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

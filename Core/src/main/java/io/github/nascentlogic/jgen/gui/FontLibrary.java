@@ -5,49 +5,48 @@ import io.github.nascentlogic.jgen.gfx.UniformBuffer;
 import io.github.nascentlogic.jgen.gui.util.Glyph;
 import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.utils.Disposable;
+import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * F.Dahl, 9/1/2026
  */
-public class FontStore implements Disposable {
+public class FontLibrary implements Disposable {
 
-    public static final String DEFAULT_FONT_NAME = "JetBrainsMono-Regular";
-    public static final String DEFAULT_FONT_PATH = "jgen/gui/font/" + DEFAULT_FONT_NAME + ".ttf";
+    public static final String JET_BRAINS_MONO_REGULAR = "JetBrainsMono-Regular";
+    public static final String OPEN_SANS_REGULAR = "OpenSans-Regular";
+    public static final String RESOURCES_DIR = "jgen/gui/font/";
     public static final int MAX_FONT_SLOTS = 5;
-
     private static final int GLYPH_SIZE_FLOAT = 8;
     private static final int FONT_SIZE_FLOAT = (Font.NUM_GLYPHS + 1) * GLYPH_SIZE_FLOAT + 4;
     private static final int FONT_SIZE_BYTES = FONT_SIZE_FLOAT * Float.BYTES;
     private static final int INDEX_MAP_OFFSET_BYTES = MAX_FONT_SLOTS * FONT_SIZE_BYTES;
     private static final int INDEX_MAP_SIZE_BYTES = (MAX_FONT_SLOTS * 4) * Float.BYTES;
     private static final int UBO_SIZE_BYTES = FONT_SIZE_BYTES * MAX_FONT_SLOTS + INDEX_MAP_SIZE_BYTES;
-
-    // GPU Storage
+    // GPU Storage -------------------------------------------------------------------------------------
     private final UniformBuffer ubo;
     private final FloatBuffer uploadBuffer;
     private final Texture[] textures = new Texture[MAX_FONT_SLOTS];
     private int numUploadedFonts;
-
-    // CPU Storage
+    // CPU Storage -------------------------------------------------------------------------------------
     private final Map<String,Font> fontLibrary = new HashMap<>();
     private final Font[] uboFontSlots = new Font[MAX_FONT_SLOTS];
     private final int[] logicalToUboSlotMap = new int[MAX_FONT_SLOTS]; // indices point to default font (0)
-
-
-    FontStore() throws Exception {
-        Font defaultFont = Disk.resourceFont(DEFAULT_FONT_PATH);
+    // -------------------------------------------------------------------------------------------------
+    FontLibrary() throws Exception {
+        Font defaultFont  = Disk.resourceFont(RESOURCES_DIR + OPEN_SANS_REGULAR + ".ttf");
+        Font monoCodeFont = Disk.resourceFont(RESOURCES_DIR + JET_BRAINS_MONO_REGULAR + ".ttf");
         fontLibrary.put(defaultFont.name,defaultFont);
+        fontLibrary.put(monoCodeFont.name,monoCodeFont);
         ubo = new UniformBuffer(UBO_SIZE_BYTES,false);
         uploadBuffer = MemoryUtil.memAllocFloat(FONT_SIZE_FLOAT);
         bindFontInternal(defaultFont,0);
+        bindFontInternal(monoCodeFont,1);
     }
 
     /** Add font to library. Will not replace existing.
@@ -67,6 +66,7 @@ public class FontStore implements Disposable {
     boolean bindFont(String name, int logicalIndex) {
         Font font = storedFont(name);
         if (font == null) return false;
+        int index = JgenMath.wrapi(logicalIndex,MAX_FONT_SLOTS);
         bindFontInternal(font, logicalIndex);
         return true;
     }
@@ -135,14 +135,15 @@ public class FontStore implements Disposable {
     }
 
     /** Get the raw upload index for font, or -1 if not uploaded */
-    private int findUboSlotOf(Font font) {
+    int findUboSlotOf(Font font) {
         for (int i = 0; i < uboFontSlots.length; i++) {
             if (uboFontSlots[i] == font) return i;
         } return -1;
     }
 
     Font boundFont(int logicalIndex) {
-        return uboFontSlots[logicalToUboSlotMap[logicalIndex]];
+        int index = JgenMath.wrapi(logicalIndex,MAX_FONT_SLOTS);
+        return uboFontSlots[logicalToUboSlotMap[index]];
     }
 
     Texture boundFontTexture(int logicalIndex) {
@@ -163,15 +164,13 @@ public class FontStore implements Disposable {
     UniformBuffer ubo() {
         return ubo;
     }
-
     Font storedFont(String name) {
         return fontLibrary.get(name);
     }
-
+    List<Font> storedFonts() { return new ArrayList<>(fontLibrary.values()); }
     int numStoredFonts() {
         return fontLibrary.size();
     }
-
     int numUploadedFonts() {
         return numUploadedFonts;
     }

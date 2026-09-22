@@ -42,10 +42,21 @@ public class Buffers {
         bindVAO(vao);
         return vao;
     }
+    public static int generateVBO(int usage, int size) { return generateBindBuffer(GL_ARRAY_BUFFER,usage,size); }
+    public static int generateBindVBO(int usage, int size) {
+        int vbo = generateVBO(usage,size);
+        bindVBO(vbo);
+        return vbo;
+    }
+    public static int generateEBO(int size) { return generateBindBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_STATIC_DRAW,size); }
+    public static int generateBindEBO(int size) {
+        int ebo = generateEBO(size);
+        bindEBO(ebo);
+        return ebo;
+    }
 
-    public static int generateVBO(int usage, int size) { return generateBuffer(GL_ARRAY_BUFFER,usage,size); }
-    public static int generateEBO(int size) { return generateBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_STATIC_DRAW,size); }
-    public static int generateEBO(byte[] indices) {
+
+    public static int generateBindEBO(byte[] indices) {
         int ebo = glGenBuffers();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -61,7 +72,7 @@ public class Buffers {
         } return ebo;
     }
 
-    public static int generateEBO(short[] indices) {
+    public static int generateBindEBO(short[] indices) {
         int ebo = glGenBuffers();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -77,7 +88,7 @@ public class Buffers {
         } return ebo;
     }
 
-    public static int generateEBO(int[] indices) {
+    public static int generateBindEBO(int[] indices) {
         int ebo = glGenBuffers();
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo);
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -100,21 +111,21 @@ public class Buffers {
      * @param count number of quads (max count is 8192)
      * @return opengl buffer handle for the ebo
      */
-    public static int generateQuadEBO(int count) {
-        return generateEBO(quadIndicesArray(count));
+    public static int generateBindQuadEBO(int count) {
+        return generateBindEBO(quadIndicesArray(count));
     }
 
-    public static int generateUBO(boolean dynamic, int size) {
-        return generateUBO(dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW, size);
+    public static int generateBindUBO(boolean dynamic, int size) {
+        return generateBindUBO(dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW, size);
     }
 
-    public static int generateUBO(int usage, int size) {
+    public static int generateBindUBO(int usage, int size) {
         if (size > 16384) Logger.info("Creating large UBO ({} bytes). OpenGL min supported size is 16 KB.", size);
         if (size > 65536) Logger.warn("Creating very large UBO ({} bytes). Maximum recommended size is 64 KB.", size);
-        return generateBuffer(GL_UNIFORM_BUFFER,usage,size);
+        return generateBindBuffer(GL_UNIFORM_BUFFER,usage,size);
     }
 
-    public static int generateBuffer(int target, int usage, int size) {
+    public static int generateBindBuffer(int target, int usage, int size) {
         if (size < 0) throw new IllegalArgumentException("Buffer size must be greater than 0");
         int handle = glGenBuffers();
         glBindBuffer(target,handle);

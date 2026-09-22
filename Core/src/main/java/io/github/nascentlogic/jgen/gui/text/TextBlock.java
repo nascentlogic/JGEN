@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.text;
+package io.github.nascentlogic.jgen.gui.text;
 
 
 import java.nio.BufferOverflowException;
@@ -16,6 +16,11 @@ public class TextBlock extends ManagedText {
     // =============================================================================
     // Constructors
     // =============================================================================
+
+    /** allocates 32 byte */
+    public TextBlock() {
+        allocate(ByteArena.MIN_BLOCK_SIZE);
+    }
 
     public TextBlock(int capacity) {
         if (capacity < 0) throw new IllegalArgumentException("capacity < 0");
@@ -55,6 +60,17 @@ public class TextBlock extends ManagedText {
         len = 0;
         return buffer;
     }
+
+    public int setInt(int value) {
+        len = Text.insertIntDigits(value,memory(),arenaOffset());
+        return len;
+    }
+
+    public int setFloat(double value, int decimals) {
+        len = Text.insertFloatDigits(value,decimals,memory(),arenaOffset());
+        return len;
+    }
+
 
     // =============================================================================
     // ManagedText

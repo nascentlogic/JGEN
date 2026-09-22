@@ -23,8 +23,10 @@ struct CharData {
     TextureRegion region; // NDC
     vec4 color;
     uint font;
-    float screenPxRange; // Changed from dfPixelRange to actual screen space range
+    float screenPxRange;
     float dfPixelRange;
+    float glow;
+    bool outline;
     bool cursor;
 };
 
@@ -56,16 +58,18 @@ struct VertexData {
     uint ch;
     uint gSize;
     uint font;
-    uint unused;
+    uint outline;
+    uint glow;
 };
 
 VertexData unpackVertexData(float floatBits) {
     uint intBits = floatBitsToUint(floatBits);
     VertexData data;
-    data.ch     = (intBits      ) & 0xFF;
-    data.gSize  = (intBits >> 8 ) & 0xFF;
-    data.font   = (intBits >> 16) & 0xFF;
-    data.unused = (intBits >> 24) & 0xFF;
+    data.ch      = (intBits      ) & 0x0FF;
+    data.gSize   = (intBits >> 8 ) & 0x0FF;
+    data.font    = (intBits >> 16) & 0x007;
+    data.outline = (intBits >> 19) & 0x001;
+    data.glow    = (intBits >> 20) & 0xFFF;
     data.font = textBlock.indexMap[data.font];
     return data;
 }
@@ -121,6 +125,9 @@ void main() {
     charData.region = generateRegion(glyph, penScreenPos, scale);
     charData.color = color;
     charData.font = vertexData.font;
+    charData.outline = (vertexData.outline == 1u);
+    charData.glow = float(vertexData.glow) / 4095.0;
+
 
     charData.screenPxRange = (font.msdfRange * 2.0) * scale;
     charData.dfPixelRange = font.msdfRange * 2.0;

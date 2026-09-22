@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.text;
+package io.github.nascentlogic.jgen.gui.text;
 
 import io.github.nascentlogic.jgen.utils.Disposable;
 
