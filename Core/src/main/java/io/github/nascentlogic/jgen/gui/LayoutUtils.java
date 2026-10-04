@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.gui.util;
+package io.github.nascentlogic.jgen.gui;
 
 import org.joml.primitives.Rectanglef;
 

@@ -2,10 +2,8 @@ package io.github.nascentlogic.jgen.gui;
 
 import io.github.nascentlogic.jgen.gfx.Texture;
 import io.github.nascentlogic.jgen.gfx.UniformBuffer;
-import io.github.nascentlogic.jgen.gui.util.Glyph;
 import io.github.nascentlogic.jgen.io.Disk;
 import io.github.nascentlogic.jgen.utils.Disposable;
-import io.github.nascentlogic.jgen.utils.JgenMath;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -66,7 +64,6 @@ public class FontLibrary implements Disposable {
     boolean bindFont(String name, int logicalIndex) {
         Font font = storedFont(name);
         if (font == null) return false;
-        int index = JgenMath.wrapi(logicalIndex,MAX_FONT_SLOTS);
         bindFontInternal(font, logicalIndex);
         return true;
     }
@@ -120,7 +117,7 @@ public class FontLibrary implements Disposable {
         } pushGlyph(font.cursor, uploadBuffer);
         uploadBuffer.put(font.size).put(font.msdfRange).put(0).put(0);
         ubo.upload(bufferOffset, uploadBuffer.flip());
-    } private void pushGlyph(Glyph glyph, FloatBuffer buffer) {
+    } private void pushGlyph(Font.Glyph glyph, FloatBuffer buffer) {
         buffer.put(glyph.u()).put(glyph.v()).put(glyph.u2()).put(glyph.v2());
         buffer.put(glyph.w()).put(glyph.h()).put(glyph.xOff()).put(glyph.yOff());
     }
@@ -142,8 +139,8 @@ public class FontLibrary implements Disposable {
     }
 
     Font boundFont(int logicalIndex) {
-        int index = JgenMath.wrapi(logicalIndex,MAX_FONT_SLOTS);
-        return uboFontSlots[logicalToUboSlotMap[index]];
+        Objects.checkIndex(logicalIndex, MAX_FONT_SLOTS);
+        return uboFontSlots[logicalToUboSlotMap[logicalIndex]];
     }
 
     Texture boundFontTexture(int logicalIndex) {

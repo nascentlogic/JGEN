@@ -16,7 +16,7 @@ public class TestGame implements Game {
         Jgen.get().launch(new TestGame(),args);
     }
 
-    GuiWindowTest windowTest;
+    GuiWindowTest windowTest = new GuiWindowTest();
     JuiCore jui;
 
     public void configure(LaunchConfig config, String[] args) {
@@ -28,25 +28,22 @@ public class TestGame implements Game {
     }
 
     public void start() throws Exception {
-        windowTest = new GuiWindowTest();
         jui = new JuiCore();
+        jui.windowRegister(windowTest,1);
     }
 
     public void update(double dt) {
-        Keyboard keys = Jgen.get().keys();
-        if (keys.justPressed(GLFW_KEY_ESCAPE)) Jgen.get().exit();
-        // System.out.println(mouse.position().x);
-        // System.out.println(Jgen.get().time().fpsEstimate());
+        if (Jgen.get().keys().justPressed(GLFW_KEY_ESCAPE)) Jgen.get().exit();
     }
 
+
     public void render() {
-        jui.beginFrame();
-        windowTest.render(jui);
-        Jgen.get().window().presentFrame(jui.endFrame(),true);
+
+        Jgen.get().window().presentFrame(jui.render(),true);
     }
 
 
     public void exit() {
-        Disposable.free(jui,windowTest);
+        Disposable.free(jui);
     }
 }

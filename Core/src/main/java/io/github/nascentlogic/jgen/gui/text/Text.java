@@ -8,6 +8,8 @@ import java.util.Objects;
  */
 public interface Text extends CharSequence, Comparable<CharSequence> {
 
+    /** Glbbal fixed char count tab indents for Text */
+    int TAB_LEN = 4;
     /** Singleton 0 length, UmmanagedText. */
     Text EMPTY_TEXT = EmptyText.INSTANCE;
     /** 0 length, Read-Only ByteBuffer. */
@@ -196,6 +198,27 @@ public interface Text extends CharSequence, Comparable<CharSequence> {
     // =============================================================================
     // CHARACTER TYPE SEARCH
     // =============================================================================
+
+
+    /**
+     * Returns the number of visual lines this text occupies when word-wrapping is disabled.
+     * <p>
+     * The result depends solely on the number of {@link #LINE_FEED} characters:
+     * <ul>
+     *   <li>An empty text returns {@code 0}.</li>
+     *   <li>Otherwise the value is {@code numberOfLineFeeds + 1}.</li>
+     * </ul>
+     * Consequently a text that ends with a line feed produces a trailing empty line
+     * @return the number of lines (0 for empty text)
+     */
+    default int numLines() {
+        if (isEmpty()) return 0;
+        int len = length();
+        int count = 1;
+        for (int i = 0; i < len; i++) {
+            if (get(i) == LINE_FEED) count++;
+        } return count;
+    }
 
     /**
      * Finds the index of the first printable character at or after {@code fromIndex}.

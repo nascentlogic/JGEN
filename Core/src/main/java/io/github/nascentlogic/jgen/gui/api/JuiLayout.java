@@ -1,7 +1,6 @@
 package io.github.nascentlogic.jgen.gui.api;
 
-import io.github.nascentlogic.jgen.gui.util.Axis;
-import io.github.nascentlogic.jgen.gui.util.Container;
+import io.github.nascentlogic.jgen.gui.Container;
 import org.joml.primitives.Rectanglef;
 
 import java.util.Objects;
@@ -9,7 +8,7 @@ import java.util.Objects;
 /**
  * F.Dahl, 9/14/2026
  */
-public interface JuiLayoutAPI {
+public interface JuiLayout {
 
 
 

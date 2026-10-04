@@ -2,7 +2,6 @@ package io.github.nascentlogic.jgen.gui;
 
 import io.github.nascentlogic.jgen.gfx.Bitmap;
 import io.github.nascentlogic.jgen.gfx.Buffers;
-import io.github.nascentlogic.jgen.gui.util.Glyph;
 import io.github.nascentlogic.jgen.utils.AtlasPacker;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.TextureRegion;
@@ -38,6 +37,7 @@ public class Font implements Disposable {
     public static final int NUM_GLYPHS   = 95;   // ' ' (32) .. '~' (126)
     public static final int FIRST_CHAR   = 32;
     public static final int LAST_CHAR    = 126;
+    public static final int TAB_LEN      = 4;   // global constant for tab length (Only psycopaths need to modify this to something else)
 
     public final String name;
     public final float size;
@@ -52,6 +52,32 @@ public class Font implements Disposable {
     private final Glyph[] glyphs;
     private final float[] kerning;
     private transient Bitmap bitmap;
+
+    /**
+     * @param value character
+     * @param advance character base advance
+     * @param xOff penX -> bottom left of character region
+     * @param yOff penY -> bottom left of character region
+     * @param x atlas x-position
+     * @param y atlas y-position
+     * @param w atlas region w
+     * @param h atlas region h
+     * @param u left UV
+     * @param v top UV
+     * @param u2 right UV
+     * @param v2 bottom UV
+     */
+    public record Glyph(char value, float advance, float xOff, float yOff,
+                        int x, int y, int w, int h,
+                        float u, float v, float u2, float v2) {
+        @Override
+        public String toString() {
+            return String.format(
+                    "Glyph'%c' adv=%.2f off=(%.2f,%.2f) atlas=[%d,%d %dx%d] uv=[%.4f,%.4f → %.4f,%.4f]",
+                    value, advance, xOff, yOff, x, y, w, h, u, v, u2, v2);
+        }
+    }
+
 
     /* GSON */
     private Font() {
@@ -139,6 +165,10 @@ public class Font implements Disposable {
 
     public float lineHeight() {
         return ascent + descent + lineGap;
+    }
+
+    public float scale(int size) {
+        return size / this.size;
     }
 
     public Bitmap bitmap() {

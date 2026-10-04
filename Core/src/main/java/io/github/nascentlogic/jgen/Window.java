@@ -257,6 +257,7 @@ public final class Window {
      * then process the input for connected gamepads, keyboard and mouse.
      */
     void processInput() {
+        keyboard.clearKeyEvents();
         glfwPollEvents();
         gamepads.processInput();
         keyboard.processInput();

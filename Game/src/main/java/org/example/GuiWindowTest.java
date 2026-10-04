@@ -1,15 +1,15 @@
 package org.example;
 
 import io.github.nascentlogic.jgen.Jgen;
+import io.github.nascentlogic.jgen.Mouse;
 import io.github.nascentlogic.jgen.gfx.Color;
-import io.github.nascentlogic.jgen.gui.Font;
-import io.github.nascentlogic.jgen.gui.JuiCore;
-import io.github.nascentlogic.jgen.gui.api.JuiStateAPI;
+import io.github.nascentlogic.jgen.gui.*;
+import io.github.nascentlogic.jgen.gui.api.JuiState;
+import io.github.nascentlogic.jgen.gui.api.JuiWindow;
+import io.github.nascentlogic.jgen.gui.api.TextAlignment;
 import io.github.nascentlogic.jgen.gui.text.ManagedText;
 import io.github.nascentlogic.jgen.gui.text.TextBlock;
-import io.github.nascentlogic.jgen.gui.util.Axis;
-import io.github.nascentlogic.jgen.gui.util.Container;
-import io.github.nascentlogic.jgen.gui.util.LayoutUtils;
+import io.github.nascentlogic.jgen.gui.api.Axis;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import org.joml.Vector2f;
 import org.joml.primitives.Rectanglef;
@@ -20,9 +20,34 @@ import java.util.List;
 /**
  * F.Dahl, 9/18/2026
  */
-public class GuiWindowTest implements Disposable {
+public class GuiWindowTest implements JuiWindow, Disposable {
 
     private static final float ANIM_DURATION = 0.33f;
+
+    @Override
+    public void process(JuiCore jui, float dt) {
+        render(jui);
+    }
+
+    @Override
+    public String name() {
+        return "GuiWindowTest";
+    }
+
+    @Override
+    public void open() {
+
+    }
+
+    @Override
+    public void close() {
+
+    }
+
+    @Override
+    public boolean isOpen() {
+        return true;
+    }
 
     private static final class WindowState {
         boolean closed = false;
@@ -190,8 +215,8 @@ public class GuiWindowTest implements Disposable {
         }
 
 
-        if (jui.currentDraggedID() != JuiStateAPI.NULL) {
-            if (jui.isDragged(navID, JuiStateAPI.MOUSE_LEFT)) {
+        if (jui.currentDraggedID() != JuiState.NULL) {
+            if (jui.isDragged(navID, JuiState.MOUSE_LEFT)) {
                 Vector2f windowAtdragStart = jui.getVec2f(navID,winBounds.minX,winBounds.minY);
                 if (jui.justDragged(navID)) windowAtdragStart.set(winBounds.minX,winBounds.minY);
                 float targetX = windowAtdragStart.x + jui.mouseDragVectorX();
@@ -200,7 +225,7 @@ public class GuiWindowTest implements Disposable {
                 float height = winBounds.lengthY();
                 winBounds.setMin(targetX,targetY).setMax(targetX + width, targetY + height);
             }
-            if (jui.isDragged(tBorderID,JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(tBorderID, JuiState.MOUSE_LEFT)) {
                 if (jui.justDragged(tBorderID)) jui.persistentPut(tBorderID, winBounds.maxY);
                 float borderAtDragStart = jui.getFloat(tBorderID, winBounds.maxY);
                 float targetY = borderAtDragStart + jui.mouseDragVectorY();
@@ -210,7 +235,7 @@ public class GuiWindowTest implements Disposable {
                 float newHeight = Math.max(windowState.minHeight, rawHeight);
                 winBounds.maxY = Math.min(fixedBottomY + newHeight, guiResH);
             }
-            if (jui.isDragged(bBorderID,JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(bBorderID, JuiState.MOUSE_LEFT)) {
                 if (jui.justDragged(bBorderID)) jui.persistentPut(bBorderID, winBounds.minY);
                 float borderAtDragStart = jui.getFloat(bBorderID, winBounds.minY);
                 float targetY = borderAtDragStart + jui.mouseDragVectorY();
@@ -220,7 +245,7 @@ public class GuiWindowTest implements Disposable {
                 float newHeight = Math.max(windowState.minHeight, rawHeight);
                 winBounds.minY = Math.max(fixedTopY - newHeight, 0f);
             }
-            if (jui.isDragged(lBorderID,JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(lBorderID, JuiState.MOUSE_LEFT)) {
                 if (jui.justDragged(lBorderID)) jui.persistentPut(lBorderID, winBounds.minX);
                 float borderAtDragStart = jui.getFloat(lBorderID, winBounds.minX);
                 float targetX = borderAtDragStart + jui.mouseDragVectorX();
@@ -240,7 +265,7 @@ public class GuiWindowTest implements Disposable {
                 float newWidth = Math.max(windowState.minWidth, rawWidth);
                 winBounds.maxX = Math.min(fixedLeftX + newWidth, guiResW);
             }
-            if (jui.isDragged(trCornerID, JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(trCornerID, JuiState.MOUSE_LEFT)) {
                 Vector2f cornerAtDragStart = jui.getVec2f(trCornerID, winBounds.maxX, winBounds.maxY);
                 if (jui.justDragged(trCornerID)) cornerAtDragStart.set(winBounds.maxX, winBounds.maxY);
                 float targetX = cornerAtDragStart.x + jui.mouseDragVectorX();
@@ -256,7 +281,7 @@ public class GuiWindowTest implements Disposable {
                 winBounds.maxX = Math.min(fixedLeftX + newWidth, guiResW);
                 winBounds.maxY = Math.min(fixedBottomY + newHeight, guiResH);
             }
-            if (jui.isDragged(brCornerID, JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(brCornerID, JuiState.MOUSE_LEFT)) {
                 Vector2f cornerAtDragStart = jui.getVec2f(brCornerID, winBounds.maxX, winBounds.minY);
                 if (jui.justDragged(brCornerID)) cornerAtDragStart.set(winBounds.maxX, winBounds.minY);
                 float targetX = cornerAtDragStart.x + jui.mouseDragVectorX();
@@ -272,7 +297,7 @@ public class GuiWindowTest implements Disposable {
                 winBounds.maxX = Math.min(fixedLeftX + newWidth, guiResW);
                 winBounds.minY = Math.max(fixedTopY - newHeight, 0f);
             }
-            if (jui.isDragged(blCornerID, JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(blCornerID, JuiState.MOUSE_LEFT)) {
                 Vector2f cornerAtDragStart = jui.getVec2f(blCornerID, winBounds.minX, winBounds.minY);
                 if (jui.justDragged(blCornerID)) cornerAtDragStart.set(winBounds.minX, winBounds.minY);
                 float targetX = cornerAtDragStart.x + jui.mouseDragVectorX();
@@ -288,7 +313,7 @@ public class GuiWindowTest implements Disposable {
                 winBounds.minX = Math.max(fixedRightX - newWidth, 0f);
                 winBounds.minY = Math.max(fixedTopY - newHeight, 0f);
             }
-            if (jui.isDragged(tlCornerID, JuiStateAPI.MOUSE_LEFT)) {
+            if (jui.isDragged(tlCornerID, JuiState.MOUSE_LEFT)) {
                 Vector2f cornerAtDragStart = jui.getVec2f(tlCornerID, winBounds.minX, winBounds.maxY);
                 if (jui.justDragged(tlCornerID)) cornerAtDragStart.set(winBounds.minX, winBounds.maxY);
                 float targetX = cornerAtDragStart.x + jui.mouseDragVectorX();
@@ -307,16 +332,18 @@ public class GuiWindowTest implements Disposable {
         }
 
 
+        int scrollAreaID = jui.getID("scrollA");
+        float scrollNorm = jui.getFloat(scrollAreaID,0);
+
+
 
 
 
         LayoutUtils.confine(0,0,guiResW,guiResH,winBounds); // keep it inside screen
 
-        jui.deferredEnable();
-        jui.drawLabel(name,winBounds.minX + 20, winBounds.maxY - 20, 1,20,Color.WHITE);
-        jui.deferredDisable();
 
-        jui.drawRect(winBounds,inventoryBgColor);
+
+        jui.drawRect(winBounds,inventoryBgColor,scrollAreaID);
 
 
 
@@ -370,38 +397,86 @@ public class GuiWindowTest implements Disposable {
         boolean navHovered = jui.isHovered(navID) || jui.isDragged(navID);
         jui.drawRect(navBar,navHovered ? inventoryNavColorHovered : inventoryNavColor,navID);
         Rectanglef remaining = jui.allocateRemaining(tmpRect2);
+
+        jui.drawLabel(name,navBar,1,Color.WHITE,TextAlignment.CENTER);
+        // jui.drawLabel(name,winBounds.minX + 20, winBounds.maxY - 20, 1,20,Color.WHITE);
+
+
+
+
+
+
+        int fontSlot = 0;
+        int fontSize = 18;
+        Font font = jui.fontGetBound(fontSlot);
+        float fontScale = fontSize / font.size;
+        boolean wrap = true;
+        TextAlignment alignment = TextAlignment.LEFT;
+
+        jui.textLayout(textBlock,remaining,0,fontSize,wrap,textLayout);
+
+        float layoutWidth = textLayout.textWidth();
+        float layoutHeight = textLayout.textHeight();
+        float viewHeight = remaining.lengthY();
+
+
+        if (jui.isHovered(scrollAreaID)) {
+            Mouse mouse = Jgen.get().mouse();
+            if (mouse.scrolled()) {
+                float amount = mouse.scrollValue();
+                float scrollStep = fontScale * font.lineHeight();
+                scrollNorm = LayoutUtils.scrollApplyWheelScroll(
+                        viewHeight,layoutHeight,scrollNorm,amount, scrollStep);
+                jui.persistentPut(scrollAreaID,scrollNorm);
+            }
+        }
+
+        float contentHeightRatio = LayoutUtils.scrollCalcContentRatio(viewHeight,layoutHeight);
+        float trackBarHeight = viewHeight;
+        float handleHeight = trackBarHeight * contentHeightRatio;
+        float trackSpace = Math.max(trackBarHeight - handleHeight,0);
+        float handleWidth = 8;
+
+        int scrollHandleID = jui.getID("scrollH");
+        if (jui.isDragged(scrollHandleID, JuiState.MOUSE_LEFT)) {
+
+
+
+            float initialDragNorm = jui.getFloat(scrollHandleID,scrollNorm);
+            if (jui.justDragged(scrollHandleID)) {
+                jui.persistentPut(scrollHandleID,scrollNorm);
+            }
+
+            scrollNorm = LayoutUtils.scrollApplyDragNorm(initialDragNorm,-jui.mouseDragVectorY(),viewHeight,handleHeight);
+            jui.persistentPut(scrollAreaID,scrollNorm);
+        }
+
+
+
+
+        float yOffset = LayoutUtils.scrollCalcOffset(viewHeight,layoutHeight,scrollNorm);
+
+        if (trackSpace > 0) {
+            Rectanglef scrollHandle = tmpRect1;
+            scrollHandle.maxX = remaining.maxX;
+            scrollHandle.minX = remaining.maxX - handleWidth;
+            scrollHandle.maxY = remaining.maxY - trackSpace * scrollNorm;
+            scrollHandle.minY = scrollHandle.maxY - handleHeight;
+            jui.drawRect(scrollHandle,inventoryNavColor,scrollHandleID);
+        }
+
+
         jui.scissorPush(remaining);
-        Font font = jui.fontGetBound(0);
-        jui.drawText(textBlock,remaining.minX,remaining.maxY - font.ascent * 18 / font.size,0,18,Color.WHITE);
+        jui.drawTextField(textBlock,textLayout,0,yOffset,Color.WHITE,0,false,alignment);
         jui.scissorPop();
 
         Container container = jui.popContainer();
-
-
-
-
-
-        jui.deferredFlush();
-
         jui.popID();
     }
 
+    TextLayout textLayout = new TextLayout();
     TextBlock textBlock = new TextBlock("" +
-            "public int currentHoveredID() { return hoveredID; }\n" +
-            "public int currentPressedID() { return pressedID; }\n" +
-            "public int currentDraggedID() { return draggedID; }\n" +
-            "public int currentSelectedID() { return selectedID; }\n" +
-            "public int currentFocusedID() { return focusedID; }\n" +
-            "public int lastFrameHoveredID() { return lastHoveredID; }\n" +
-            "public int lastFramePressedID() { return lastPressedID; }\n" +
-            "public int lastFrameDraggedID() { return lastDraggedID; }\n" +
-            "public int lastFrameFocusedID() { return lastFocusedID; }\n" +
-            "public int navigationBtn() { return navigationBtn; }\n" +
-            "public int mouseActiveBtn() { return activeMouseBtn; }\n" +
-            "public int mouseLastActiveBtn() { return lastActiveMouseBtn; }\n" +
-            "public float hoveredDuration() { return (float) (hoveredDurationNS / 1_000_000_000d); }\n" +
-            "public float pressedDuration() { return (float) (pressedDurationNS / 1_000_000_000d); }\n" +
-            "public float focusedDuration() { return (float) (focusedDurationNS / 1_000_000_000d); }");
+            "Hi everybody. Just wanted to write you a quick note to tell you what I’ve been up to. In a word, the summer has been difficult. I live in a middle of a forest which, thanks to an extremely dry winter and spring, is a tinderbox. We’ve been in and out of our house intermittently, as we wait for word on whether our house or those of our neighbors burned down. Just yesterday, a house and barn on the property right next door burned to the ground, with only a quarter mile of dry forest separating us. I haven’t appreciated firefighters so much since they went up the stairwells of the Twin Towers. So far, we’ve been lucky (or blessed with the Lord’s protection, though I’m wary of saying so since a) I don’t deserve His attention, and b) it seems to imply He cursed or ignored the people who lost their homes). It’s been tough to work consistently, which is why I’ve been longer than usual getting the next episode of Enemy out. The good news is, I’ve got about 200 pages of written material and detailed outline, and all I’ve got left is to decide which sections to include, put them in the proper order, knit them together, and hit record. Wish me luck or pray for me. It’s been a stressful summer, so I’ll take whatever I can get. I’m grateful beyond words to all of you who have kept up your subscriptions. I don’t deserve that, either, and feel like I’ve taken advantage of your generosity this year, but thank you.");
 
 
 

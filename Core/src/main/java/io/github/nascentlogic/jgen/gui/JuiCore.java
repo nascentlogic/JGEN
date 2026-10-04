@@ -2,15 +2,9 @@ package io.github.nascentlogic.jgen.gui;
 
 import io.github.nascentlogic.jgen.*;
 import io.github.nascentlogic.jgen.gfx.*;
-import io.github.nascentlogic.jgen.gui.api.JuiGraphicsAPI;
-import io.github.nascentlogic.jgen.gui.api.JuiLayoutAPI;
-import io.github.nascentlogic.jgen.gui.api.JuiStateAPI;
-import io.github.nascentlogic.jgen.gui.util.*;
+import io.github.nascentlogic.jgen.gui.api.*;
 import io.github.nascentlogic.jgen.io.Disk;
-import io.github.nascentlogic.jgen.gui.text.ManagedText;
 import io.github.nascentlogic.jgen.gui.text.Text;
-import io.github.nascentlogic.jgen.gui.text.TextBlock;
-import io.github.nascentlogic.jgen.gui.text.TextBuffer;
 import io.github.nascentlogic.jgen.utils.Disposable;
 import io.github.nascentlogic.jgen.utils.Pool;
 import org.joml.*;
@@ -37,7 +31,7 @@ import static org.lwjgl.opengl.GL30.*;
 /**
  * F.Dahl, 9/14/2026
  */
-public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
+public class JuiCore implements JuiState, JuiLayout, JuiGFX {
 
     private static final int DEFERRED_QUEUE_CAP     = 512;
     private static final int CONTAINER_STACK_CAP    = 128;
@@ -55,8 +49,15 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
     private final TextBatch textBatch;
     private final SpriteBatch spriteBatch;
     private final DeferredCalls deferredCalls;
-    private final TextBlock textBlockInternal;
-    private final TextBuffer textBufferInternal;
+    private final TextProcessor textProcessor;
+
+    // WINDOW MANAGEMENT
+    private final TreeMap<Integer, List<JuiWindow>> layers = new TreeMap<>();
+    private final Map<String, JuiWindow> windowRegistry = new HashMap<>();
+    private final Set<Integer> hiddenLayers = new HashSet<>();
+    private JuiWindow currentWindow;
+    private JuiWindow focusedWindow;
+
 
     // RENDER STATE
     private int currentBatch;
@@ -115,31 +116,30 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         framebuffer = createFramebuffer(gameW,gameH);
         textBatch = new TextBatch(fontLibrary,gameW,gameH);
         spriteBatch = new SpriteBatch(gameW,gameH);
-        textBlockInternal = new TextBlock(512);
-        textBufferInternal = new TextBuffer(2048);
+        textProcessor = new TextProcessor(fontLibrary);
         deferredCalls = new DeferredCalls();
         reset();
     }
 
     public void free() {
-        Disposable.free(
+        for (var entry : windowRegistry.entrySet()) {
+            entry.getValue().onExit();
+        } Disposable.free(
                 fontLibrary,
                 textBatch,
                 spriteBatch,
                 framebuffer,
-                textBlockInternal,
-                textBufferInternal
+                textProcessor
         );
     }
 
-
-    public void beginFrame() {
-        if (rendering) return;
+    public Texture render() {
+        if (rendering) throw new IllegalStateException("gui already rendering");
         if (idStackDepth != 0) throw new IllegalStateException("Mismatched gui id stack depth");
         if (scissorStackDepth != 0) throw new IllegalStateException("Mismatched gui container stack depth");
         if (containerStackDepth != 0) throw new IllegalStateException("Mismatched gui container stack depth");
 
-        Window window = Jgen.get().window();
+
         Mouse mouse = Jgen.get().mouse();
         Keyboard keys = Jgen.get().keys();
         Gamepads gamepads = Jgen.get().gamepads(); // later
@@ -239,8 +239,8 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         focusedDurationNS = (focusedID != NULL && focusedID == lastFocusedID) ? focusedDurationNS + deltaTimeNS : 0L;
 
         // Resize to game resolution (rare, if ever)
-        int gameW = window.gameResolutionWidth();
-        int gameH = window.gameResolutionHeight();
+        int gameW = Jgen.get().window().gameResolutionWidth();
+        int gameH = Jgen.get().window().gameResolutionHeight();
         int buffW = framebuffer.width();
         int buffH = framebuffer.height();
         if (gameW != buffW || gameH != buffH) {
@@ -264,7 +264,6 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         fontLibrary.bindTextures(0);
         fontLibrary.ubo().bindBufferBase(TEXT_BLOCK_BINDING);
 
-
         if (frameCounter == 60) {
             drawCallsHigh = drawCalls;
             spritesRenderedHigh = spritesRendered;
@@ -275,12 +274,28 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         currentBatch = SPRITE_BATCH;
         idBufferEnabled = true;
         rendering = true;
-    }
 
-    public Texture endFrame() {
-        if (!rendering) throw new IllegalStateException();
-        resumeRenderer();
+        float dt = (float) Jgen.get().time().deltaTime();
+        for (Map.Entry<Integer, List<JuiWindow>> entry : layers.entrySet()) {
+            if (hiddenLayers.contains(entry.getKey())) continue;
+            List<JuiWindow> windowLayer = entry.getValue();
+            if (focusedWindow != null && !windowLayer.isEmpty()) {
+                JuiWindow topWindow = windowLayer.getLast();
+                if (topWindow != focusedWindow && windowLayer.remove(focusedWindow)) {
+                    windowLayer.add(focusedWindow);
+                }
+            }
+            for (JuiWindow window : windowLayer) {
+                if (!window.isOpen()) continue;
+                pushID(window.name());
+                currentWindow = window;
+                window.process(this, dt);
+                currentWindow = null;
+                popID();
+            }
+        }
 
+        resume();
         flushCurrentBatch();
         glDisable(GL_SCISSOR_TEST);
         drawCalls = spriteBatch.resetDrawCalls();
@@ -295,13 +310,14 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         return framebuffer.attachment(0);
     }
 
-    public void pauseRenderer() {
+
+    public void pause() {
         if (rendering && !rendererPaused) {
             rendererPaused = true;
         }
     }
 
-    public void resumeRenderer() {
+    public void resume() {
         if (rendering && rendererPaused) {
             framebuffer.bindDraw();
             framebuffer.viewport();
@@ -377,6 +393,16 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         deferredState       = false;
         currentBatch        = SPRITE_BATCH;
 
+        currentWindow       = null;
+        focusedWindow       = null;
+
+        for (var entry : windowRegistry.entrySet()) {
+            entry.getValue().onExit();
+        }
+        layers.clear();
+        hiddenLayers.clear();
+        windowRegistry.clear();
+
         persistentStorage.clear();
 
         framebuffer.bindDraw();
@@ -384,80 +410,108 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         framebuffer.clearColorUint(1, NULL);
     }
 
-
-    public final void drawSpriteSink(Texture texture, float x1, float y1, float x2, float y2, float u, float v, float u2, float v2,
-        Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA) {
+    @Override
+    public void drawSpriteSuper(Texture texture, float x1, float y1, float x2, float y2, float u, float v, float u2, float v2,
+    Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         if (deferredState) deferredCalls.spriteCall().set(texture,x1,y1,x2,y2,u,v,u2,v2,color,glow,rot,id,transparentID,pixelAAA);
         else { useSpriteBatch(id != NULL);
             spriteBatch.push(texture,x1,y1,x2,y2,u,v,u2,v2,color,glow,rot,id,transparentID,pixelAAA);
         }
     }
-    public void drawLabel(CharSequence text, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
+
+    @Override
+    public void drawLabel(CharSequence label, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (text.isEmpty() || size <= 0) return;
+        if (label.isEmpty() || size <= 0) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } FontUtils.streamLabel(toText(text),penX,penY,fontGetBound(font),font,size,color,glow,outlined,out);
+        } textProcessor.labelFree(label,penX,penY,font,size,color,glow,outlined,out);
     }
-    public void drawLabel(CharSequence text, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment) {
+
+    @Override
+    public void drawLabel(CharSequence label, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (text.isEmpty() || size <= 0) return;
+        if (label.isEmpty()) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } FontUtils.streamLabel(toText(text),bounds,fontGetBound(font),font,size,color,glow,outlined,alignment,out);
+        } textProcessor.labelBound(label,bounds,font,color,glow,outlined,align,out);
     }
+
+   @Override
     public void drawLabelInt(int value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (size <= 0) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } textBlockInternal.setInt(value);
-        FontUtils.streamLabel(textBlockInternal,penX,penY,fontGetBound(font),font,size,color,glow,outlined,out);
+        } textProcessor.labelFreeInt(value,penX,penY,font,size,color,glow,outlined,out);
     }
-    public void drawLabelInt(int value, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment) {
+
+    @Override
+    public void drawLabelInt(int value, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (size <= 0) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } textBlockInternal.setInt(value);
-        FontUtils.streamLabel(textBlockInternal,bounds,fontGetBound(font),font,size,color,glow,outlined,alignment,out);
+        } textProcessor.labelBoundInt(value,bounds,font,color,glow,outlined,align,out);
     }
-    public void drawLabelFloat(double value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
+
+    @Override
+    public void drawLabelFloat(double value, int deci, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (size <= 0) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } textBlockInternal.setFloat(value,2);
-        FontUtils.streamLabel(textBlockInternal,penX,penY,fontGetBound(font),font,size,color,glow,outlined,out);
+        } textProcessor.labelFreeFloat(value,deci,penX,penY,font,size,color,glow,outlined,out);
     }
-    public void drawLabelFloat(double value, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, TextAlignment alignment) {
+
+    @Override
+    public void drawLabelFloat(double value, int deci, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
-        if (size <= 0) return;
         GlyphStream out;
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } textBlockInternal.setFloat(value,2);
-        FontUtils.streamLabel(textBlockInternal,bounds,fontGetBound(font),font,size,color,glow,outlined,alignment,out);
+        } textProcessor.labelBoundFloat(value,deci,bounds,font,color,glow,outlined,align,out);
     }
-    public void drawText(Text text, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
+
+    @Override
+    public void drawLabelBool(boolean value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
+        if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
+        Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
+        GlyphStream out;
+        if (deferredState) out = deferredCalls.textCall();
+        else { out = textBatch;
+            useTextBatch();
+        } textProcessor.labelFreeBool(value,penX,penY,font,size,color,glow,outlined,out);
+    }
+
+    @Override
+    public void drawLabelBool(boolean value, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
+        if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
+        Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
+        GlyphStream out;
+        if (deferredState) out = deferredCalls.textCall();
+        else { out = textBatch;
+            useTextBatch();
+        } textProcessor.labelBoundBool(value,bounds,font,color,glow,outlined,align,out);
+    }
+
+    @Override
+    public void drawText(CharSequence text, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
         if (text.isEmpty() || size <= 0) return;
@@ -465,21 +519,46 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         if (deferredState) out = deferredCalls.textCall();
         else { out = textBatch;
             useTextBatch();
-        } FontUtils.streamText(text,penX,penY,fontGetBound(font),font,size,color,glow,outlined,out);
+        } textProcessor.textFree(text,penX,penY,font,size,color,glow,outlined,out);
     }
-    public void drawText(Text text, Rectanglef bounds, int font, int size, Color color,
-                         float glow, boolean outlined, boolean wordWrap) {
+
+    @Override
+    public void drawText(CharSequence text, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, boolean wrap) {
+        if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
+        Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
+        if (text.isEmpty() || size <= 0) return;
+        GlyphStream out;
+        if (deferredState) out = deferredCalls.textCall();
+        else { out = textBatch;
+            useTextBatch();
+        } textProcessor.textBound(text,bounds,font,size,color,glow,outlined,wrap,out);
 
     }
 
+    @Override
+    public void drawTextField(Text text, TextLayout layout, float xOff, float yOff, Color color, float glow, boolean outlined, TextAlignment alignment) {
+        if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
+        Objects.checkIndex(layout.fontSlot(),FontLibrary.MAX_FONT_SLOTS);
+        if (text.isEmpty() || layout.numLines() <= 0 || layout.fontSize() <= 0) return;
+        GlyphStream out;
+        if (deferredState) out = deferredCalls.textCall();
+        else { out = textBatch;
+            useTextBatch();
+        } textProcessor.textField(text,layout,xOff,yOff,color,glow,outlined,alignment,out);
+    }
+
+
+    public void textLayout(Text text, Rectanglef bounds, int font, int size, boolean wrap, TextLayout dst) {
+        textProcessor.textLayout(text, bounds, font, size, wrap, dst); }
+    public float textHeight(Text text, int font, int size) { return textProcessor.textHeight(text,font,size); }
 
     public int resolutionWidth() { return framebuffer.width(); }
     public int resolutionHeight() { return framebuffer.height(); }
 
-    public int debugDrawCalls() { return drawCallsHigh; }
-    public int debugSpritesRendered() { return spritesRenderedHigh; }
-    public int debugCharsRendered() { return charsRenderedHigh; }
-    public int debugDeferredCallsMax() { return deferredCallsMax; }
+    public int infoDrawCalls() { return drawCallsHigh; }
+    public int infoSpritesRendered() { return spritesRenderedHigh; }
+    public int infoCharsRendered() { return charsRenderedHigh; }
+    public int infoDeferredCallsMax() { return deferredCallsMax; }
 
     public Font fontGetBound(int index) { return fontLibrary.boundFont(index); }
     public Font fontGetStored(String name) { return fontLibrary.storedFont(name); }
@@ -549,6 +628,8 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
     }
 
 
+
+
     public int currentHoveredID() { return hoveredID; }
     public int currentPressedID() { return pressedID; }
     public int currentDraggedID() { return draggedID; }
@@ -581,18 +662,23 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
     // =============================================================================
     final int[] idStack = new int[ID_STACK_CAP];
     int idStackDepth = 0;
-    public int scopeID() {
+
+    public int windowID() {
+        if (idStackDepth == 0)
+            throw new IllegalStateException("No window scope active on id stack!");
+        return idStack[0];
+    } public int scopeID() {
         return idStackDepth == 0 ? FNV_OFFSET_32 : idStack[idStackDepth - 1];
     } public int pushID(String scope) {
         if (idStackDepth >= ID_STACK_CAP) {
             throw new IllegalStateException("id stack overflow!");
-        } int newScope = JuiStateAPI.hash(scope, scopeID());
+        } int newScope = JuiState.hash(scope, scopeID());
         idStack[idStackDepth++] = newScope;
         return newScope;
     } public int pushID(int scope) {
         if (idStackDepth >= ID_STACK_CAP) {
             throw new IllegalStateException("id stack overflow!");
-        } int newScope = JuiStateAPI.hash(scope, scopeID());
+        } int newScope = JuiState.hash(scope, scopeID());
         idStack[idStackDepth++] = newScope;
         return newScope;
     } public void popID() {
@@ -600,6 +686,42 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
             throw new IllegalStateException("id stack underflow!");
         } idStackDepth--;
     }
+
+    // =============================================================================
+    // WINDOWS
+    // =============================================================================
+    public JuiWindow windowGet(String name) { return windowRegistry.get(name); }
+    public <T extends JuiWindow> T windowGet(String name, Class<T> clazz) {
+        JuiWindow window = windowRegistry.get(name);
+        if (clazz.isInstance(window)) {
+            return clazz.cast(window);
+        } return null;
+    }
+    public void windowRegister(JuiWindow window, int layer) {
+        if (window == null || window.name() == null) {
+            throw new IllegalArgumentException("jui window or window name cannot be null!");
+        } if (windowRegistry.containsKey(window.name())) {
+            throw new IllegalArgumentException("jui window already registered for name: " + window.name());
+        } windowRegistry.put(window.name(), window);
+        layers.computeIfAbsent(layer, k -> new ArrayList<>()).add(window);
+    }
+    public void windowOpen(String name) {
+        JuiWindow window = windowRegistry.get(name);
+        if (window != null) {
+            focusedWindow = window;
+            window.open();
+        }
+    }
+    public void windowClose(String name) {
+        JuiWindow window = windowRegistry.get(name);
+        if (window != null) window.close();
+    }
+
+    public void windowClaimFocus() { focusedWindow = currentWindow; }
+    public void windowLayerShow(int layer) { hiddenLayers.remove(layer); }
+    public void windowLayerHide(int layer) { hiddenLayers.add(layer); }
+    public boolean windowLayerVisible(int layer) { return !hiddenLayers.contains(layer); }
+
 
     // =============================================================================
     // CORE LAYOUT
@@ -828,18 +950,6 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
         return framebuffer;
     }
 
-
-
-    private Text toText(CharSequence string) {
-        if (string instanceof Text text) return text;
-        String str = string == null ? "" : string.toString();
-        ManagedText text;
-        if (str.length() > textBlockInternal.capacity()) {
-            text = textBufferInternal;
-        } else text = textBlockInternal;
-        text.set(str);
-        return text;
-    }
 
     private static final class DeferredCalls implements Iterable<DeferredCalls.DeferredCall> {
 
@@ -1232,6 +1342,4 @@ public class JuiCore implements JuiStateAPI, JuiLayoutAPI, JuiGraphicsAPI {
             nextSlot = 0;
         }
     }
-
-
 }

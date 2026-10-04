@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /**
  * F.Dahl, 9/14/2026
  */
-public interface JuiStateAPI {
+public interface JuiState {
 
 
     int NULL                = 0;
@@ -95,11 +95,19 @@ public interface JuiStateAPI {
     default Vector2f mouseDragVector(Vector2f dst) { return dst.set(mouseDragVectorX(), mouseDragVectorY()); }
 
     default boolean isHovered(int id) { return isValid(id) && isHoveredRaw(id); }
-    default boolean isPressed(int id) { return isValid(id) && currentPressedID() == id; }
+    default boolean isPressed(int id) {
+        boolean pressed = isValid(id) && currentPressedID() == id;
+        if (pressed) windowClaimFocus();
+        return pressed;
+    }
     default boolean isPressed(int id, int mouseBtn) { return isPressed(id) && mouseActiveBtn() == mouseBtn; }
     default boolean isDragged(int id) { return isValid(id) && currentDraggedID() == id; }
     default boolean isDragged(int id, int mouseBtn) { return isDragged(id) && mouseActiveBtn() == mouseBtn; }
-    default boolean isFocused(int id) { return isValid(id) && currentFocusedID() == id; }
+    default boolean isFocused(int id) {
+        boolean focused = isValid(id) && currentFocusedID() == id;
+        if (focused) windowClaimFocus();
+        return focused;
+    }
 
     // impulses
     default boolean justHovered(int id) { return isHovered(id) && !wasHoveredRaw(id); }
@@ -216,6 +224,7 @@ public interface JuiStateAPI {
     int HASH_SENTINEL   = 1;
 
 
+
     /** Returns current parent scope seed at top of stack, or FNV basis if root */
     int scopeID();
     /** Derive a unique ID under current stack scope for an integer index */
@@ -250,6 +259,16 @@ public interface JuiStateAPI {
         return hash == NULL ? HASH_SENTINEL : hash;
     }
 
+
+    <T extends JuiWindow> T windowGet(String name, Class<T> clazz);
+    JuiWindow windowGet(String name);
+    void windowRegister(JuiWindow window, int layer);
+    void windowOpen(String name);
+    void windowClose(String name);
+    void windowClaimFocus();
+    void windowLayerShow(int layer);
+    void windowLayerHide(int layer);
+    boolean windowLayerVisible(int layer);
 
 
     int getInt(int id, int defaultValue);

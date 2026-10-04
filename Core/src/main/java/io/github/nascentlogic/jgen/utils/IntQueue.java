@@ -75,6 +75,7 @@ public class IntQueue {
         }
     }
 
+    public void clear() { size = front = rear = 0; }
     /** Unsafe: exposes the actual underlying circular array. Use with caution. */
     public int[] array() { return queue; }
     /** Returns true if the queue contains no elements. */

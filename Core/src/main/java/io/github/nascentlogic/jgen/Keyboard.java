@@ -2,8 +2,6 @@ package io.github.nascentlogic.jgen;
 
 import io.github.nascentlogic.jgen.utils.IntQueue;
 
-import java.util.Objects;
-
 import static org.lwjgl.glfw.GLFW.*;
 
 /**
@@ -11,50 +9,46 @@ import static org.lwjgl.glfw.GLFW.*;
  */
 public final class Keyboard {
 
-    public interface InputStream {
-        void onCharType(byte c);
-        void onKeyEvent(int key, int mods, int action);
+    public static final class KeyEvent {
+        public int key, mods, action;
+        void set (int key, int mods, int action) {
+            this.key = key; this.mods = mods; this.action = action;
+        }
     }
 
-    public static final int MAX_PROCESSORS = 16;
-    private final InputStream[] textProcessors = new InputStream[MAX_PROCESSORS];
-    private int processorCount = 0;
-
-    private final IntQueue queuedKeys = new IntQueue(48);       // queued key events
+    private int keyEventPos;
+    private int numKeyEvents;
+    private final KeyEvent[] keyEvents = new KeyEvent[16];
     private final IntQueue queuedChar = new IntQueue(16);       // queued chars
     private final boolean[] cKeys = new boolean[GLFW_KEY_LAST];         // currently pressed
     private final boolean[] pkeys = new boolean[GLFW_KEY_LAST];         // previously pressed
 
-    Keyboard() { /* */ }
+    Keyboard() {
+        for (int i = 0; i < keyEvents.length; i++) {
+            keyEvents[i] = new KeyEvent();
+        }
+    }
+
+    void clearKeyEvents() {
+        numKeyEvents = 0;
+        keyEventPos = 0;
+        queuedChar.clear();
+    }
 
     void processInput() {
         System.arraycopy(cKeys,0, pkeys,0, GLFW_KEY_LAST);
-        while (!queuedKeys.isEmpty()) {
-            int k = queuedKeys.dequeue();
-            int m = queuedKeys.dequeue();
-            int a = queuedKeys.dequeue();
-            if (a == GLFW_PRESS) cKeys[k] = true;
-            else if (a == GLFW_RELEASE) cKeys[k] = false;
-            // Iterating backwards handles mid-callback removals cleanly
-            // without skipping elements or risking NullPointerExceptions
-            for (int i = processorCount - 1; i >= 0; i--)
-                textProcessors[i].onKeyEvent(k, m, a);
-        } while (!queuedChar.isEmpty()) {
-            int c = queuedChar.dequeue();
-            int count = processorCount;
-            for (int i = processorCount - 1; i >= 0; i--) {
-                textProcessors[i].onCharType((byte) c);
-            }
+        for (int i = 0; i < numKeyEvents; i++) {
+            KeyEvent event = keyEvents[i];
+            if (event.action == GLFW_PRESS) cKeys[event.key] = true;
+            else if (event.action == GLFW_RELEASE) cKeys[event.key] = false;
         }
     }
 
     void onKeyEvent(int key, int mods, int action) {
         if (inRange(key)) {
-            if (queuedKeys.size() == 48)
-                queuedKeys.dequeue(3);
-            queuedKeys.enqueue(key);
-            queuedKeys.enqueue(mods);
-            queuedKeys.enqueue(action);
+            if (numKeyEvents < keyEvents.length) {
+                keyEvents[numKeyEvents++].set(key, mods, action);
+            }
         }
     }
 
@@ -120,33 +114,10 @@ public final class Keyboard {
         }
     }
 
-    public void addTextProcessor(InputStream processor) {
-        Objects.requireNonNull(processor, "processor cannot be null");
-        for (int i = 0; i < processorCount; i++) {
-            if (textProcessors[i] == processor) return;
-        } if (processorCount >= MAX_PROCESSORS) {
-            throw new IllegalStateException("processor capacity reached (" + MAX_PROCESSORS + ")");
-        } textProcessors[processorCount++] = processor;
-    }
-
-    public boolean removeTextProcessor(InputStream processor) {
-        Objects.requireNonNull(processor, "processor cannot be null");
-        for (int i = 0; i < processorCount; i++) {
-            if (textProcessors[i] == processor) {
-                int numMoved = processorCount - i - 1;
-                if (numMoved > 0) {
-                    System.arraycopy(textProcessors, i + 1, textProcessors, i, numMoved);
-                } textProcessors[--processorCount] = null;
-                return true;
-            }
-        } return false;
-    }
-
-    public void removeAllTextProcessors() {
-        for (int i = 0; i < processorCount; i++) {
-            textProcessors[i] = null;
-        } processorCount = 0;
-    }
+    public boolean hasKeyEvents() { return keyEventPos < numKeyEvents; }
+    public KeyEvent nextKeyEvent() { return keyEvents[keyEventPos++]; }
+    public boolean hasCharEvents() { return !queuedChar.isEmpty(); }
+    public byte nextChar() { return (byte) queuedChar.dequeue(); }
 
     public boolean pressed(int key) {
         return inRange(key) && cKeys[key];

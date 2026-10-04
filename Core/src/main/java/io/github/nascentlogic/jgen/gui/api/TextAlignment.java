@@ -1,4 +1,4 @@
-package io.github.nascentlogic.jgen.gui.util;
+package io.github.nascentlogic.jgen.gui.api;
 
 /**
  * F.Dahl, 9/1/2026
