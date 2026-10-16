@@ -99,20 +99,11 @@ public class Bitmap implements Disposable {
     public int width() { return width; }
     public int height() { return height; }
 
-    public void setPixel(Color color, int x, int y) {
-        setPixel(color.intBits(), x, y);
-    }
 
     public void setPixel(int value, int x, int y) {
         int p = (y * width + x) * channels;
         for (int c = 0; c < channels; c++)
             pixels.put(p + c,(byte) ((value >> (c * 8)) & 0xFF));
-    }
-
-    public Color getPixel(int x, int y, Color dst) {
-        int bits = getPixel(x, y);
-        if (channels == 3) bits |= (0xFF << 24);
-        return dst.setIntBits(bits);
     }
 
     public int getPixel(int x, int y) {

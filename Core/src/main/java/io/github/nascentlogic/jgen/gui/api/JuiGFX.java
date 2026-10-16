@@ -3,9 +3,11 @@ package io.github.nascentlogic.jgen.gui.api;
 import io.github.nascentlogic.jgen.gfx.Color;
 import io.github.nascentlogic.jgen.gfx.Texture;
 import io.github.nascentlogic.jgen.gui.Font;
+import io.github.nascentlogic.jgen.gui.LayoutUtils;
 import io.github.nascentlogic.jgen.gui.TextLayout;
 import io.github.nascentlogic.jgen.gui.text.Text;
 import io.github.nascentlogic.jgen.utils.Disposable;
+import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.joml.Vector4f;
 import org.joml.primitives.Rectanglef;
 import org.joml.primitives.Rectanglei;
@@ -18,18 +20,34 @@ import java.util.List;
 public interface JuiGFX extends Disposable {
 
 
-    int resolutionWidth();
-    int resolutionHeight();
+    /** Global UI scale */
+    float scale();
+    /** Set Global UI scale*/
+    void setScale(float scale);
+    /** Height of the scaled UI */
+    float virtualWidth();
+    /** Width of the scaled UI */
+    float virtualHeight();
+    /** Actual Width of the UI framebuffer */
+    int framebufferWidth();
+    /** Actual Height of the UI frmebuffer */
+    int framebufferHeight();
 
+    /** Max (not average) combined draw calls of all batches over a short interval (60 frames) */
     int infoDrawCalls();
+    /** Max (not average) combined quads rendered by the sprite batch over a short interval (60 frames) */
     int infoSpritesRendered();
+    /** Max (not average) combined characters rendered by the text batch over a short interval (60 frames) */
     int infoCharsRendered();
+    /** Highest bulk number of defered commands over the lifetime of the GUI (debugging) */
     int infoDeferredCallsMax();
 
-    /** Calculate layout*/
+    /** Calculate layout */
     void textLayout(Text text, Rectanglef bounds, int font, int size, boolean wrap, TextLayout dst);
     /** Height of free text (no-wrap) */
     float textHeight(Text text, int font, int size);
+
+
 
     /** Adds a font to stored fonts if no font already exist with the same name.
      * @return false if a font already exist under the same name.
@@ -56,20 +74,22 @@ public interface JuiGFX extends Disposable {
     /** Number of fonts in library */
     int fontNumStored();
 
-    /** Push a glScissor rectangle on the stack. Geometry will be culled outside it's bounds.
-     * Does not take previously pushed rectangles into accont (no intersection with previous). */
-    void scissorPush(float x1, float y1, float x2, float y2);
-    /** @see #scissorPush(float, float, float, float) */
-    default void scissorPush(Rectanglei scissor) {
-        scissorPush(scissor.minX,scissor.minY,scissor.maxX,scissor.maxY);
-    } /** @see #scissorPush(float, float, float, float) */
-    default void scissorPush(Rectanglef scissor) {
-        scissorPush(scissor.minX,scissor.minY,scissor.maxX,scissor.maxY);
-    } /** Pop the current scissor rectangle on the stack. If the pppped ractangle was the last,
-     * GL_SCISSOR_TEST is disabled */
+
+
+
+
+
+    void scissorPush(float x1, float y1, float x2, float y2, boolean intersection);
+
+    default void scissorPush(Rectanglef bounds, boolean intersection) {
+        scissorPush(bounds.minX,bounds.minY,bounds.maxX,bounds.maxY,intersection);
+    }
     void scissorPop();
+    /** @return true if rect intersects the current scissor on stack */
+    boolean scissorIntersects(Rectanglef rect);
     /** Number of scissor rectangles currently on the stack */
-    int scissorStackSize();
+    int scissorStackDepth();
+
 
 
     /** Enables deferred rendering.
@@ -86,20 +106,49 @@ public interface JuiGFX extends Disposable {
 
 
 
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRect(Rectanglef rect, Color color) { drawRectRot(rect,color,0,0,0,true); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRect(Rectanglef rect, Color color, int id) { drawRectRot(rect,color,0,0,id,true); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRect(Rectanglef rect, Color color, float glow, int id) { drawRectRot(rect,color,glow,0,id,true); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRect(Rectanglef rect, Color color, float glow, int id, boolean transparentID) { drawRectRot(rect,color,glow,0,id,transparentID); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRectRot(Rectanglef rect, Color color, float rot) { drawRectRot(rect,color,0,rot,0,true); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRectRot(Rectanglef rect, Color color, float rot, int id) { drawRectRot(rect,color,0,rot,id,true); }
-    /** {@link #drawRectRot(Rectanglef, Color, float, float, int, boolean)} */
-    default void drawRectRot(Rectanglef rect, Color color, float glow, float rot, int id) { drawRectRot(rect,color,glow,rot,id,true); }
+
+
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color) { drawBorders(rect,border,extrude,color,color,0,0); }
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color, int id) { drawBorders(rect,border,extrude,color,color,0,id); }
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color, float glow, int id) { drawBorders(rect,border,extrude,color,color,glow,id); }
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color1, Color color2) { drawBorders(rect,border,extrude,color1,color2,0,0); }
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color1, Color color2, int id) { drawBorders(rect,border,extrude,color1,color2,0,id); }
+    default void drawBorders(Rectanglef rect, float border, boolean extrude, Color color1, Color color2, float glow, int id) {
+        if (border == 0f) return;
+        Rectanglef tmp = JgenUtils.pushRect();
+        if (extrude) LayoutUtils.pad(rect,-border);
+        drawRectRot(LayoutUtils.borderTop(rect,tmp,border,false),color1,glow,0,id);
+        drawRectRot(LayoutUtils.borderRight(rect,tmp,border,false),color1,glow,0,id);
+        drawRectRot(LayoutUtils.borderBottom(rect,tmp,border,false),color2,glow,0,id);
+        drawRectRot(LayoutUtils.borderLeft(rect,tmp,border,false),color2,glow,0,id);
+        if (extrude) LayoutUtils.pad(rect,border);
+        JgenUtils.popRect();
+    }
+
+
+    default void drawBox(Rectanglef rect, float border, boolean extrude, Color color) { drawBox(rect,border,0.1f,extrude,color,0,0); }
+    default void drawBox(Rectanglef rect, float border, boolean extrude, Color color, int id) { drawBox(rect,border,0.1f,extrude,color,0,id); }
+    default void drawBox(Rectanglef rect, float border, float borderContrast, boolean extrude, Color color, int id) { drawBox(rect,border,borderContrast,extrude,color,0,id); }
+    default void drawBox(Rectanglef rect, float border, float borderContrast, boolean extrude, Color color, float glow, int id) {
+        drawRect(rect,color,glow,id);
+        if (border == 0f) return;
+        Color color1 = JgenUtils.pushColor(color).brighten(borderContrast);
+        Color color2 = JgenUtils.pushColor(color).darken(borderContrast);
+        drawBorders(rect,border,extrude,color1,color2,glow,id);
+        JgenUtils.popColor(2);
+    }
+
+
+    /** {@link #drawRectRot(Rectanglef, Color, float, float, int)} */
+    default void drawRect(Rectanglef rect, Color color) { drawRectRot(rect,color,0,0,0); }
+    /** {@link #drawRectRot(Rectanglef, Color, float, float, int)} */
+    default void drawRect(Rectanglef rect, Color color, int id) { drawRectRot(rect,color,0,0,id); }
+    /** {@link #drawRectRot(Rectanglef, Color, float, float, int)} */
+    default void drawRect(Rectanglef rect, Color color, float glow, int id) { drawRectRot(rect,color,glow,0,id); }
+    /** {@link #drawRectRot(Rectanglef, Color, float, float, int)} */
+    default void drawRectRot(Rectanglef rect, Color color, float rot) { drawRectRot(rect,color,0,rot,0); }
+    /** {@link #drawRectRot(Rectanglef, Color, float, float, int)} */
+    default void drawRectRot(Rectanglef rect, Color color, float rot, int id) { drawRectRot(rect,color,0,rot,id); }
     /**
      * Rendeer a colored quad in screen space.
      * @param rect sprite transform on screen
@@ -107,10 +156,9 @@ public interface JuiGFX extends Disposable {
      * @param glow normalized strength of the color (0: color, 1: color + color + glow * MAX_GLOW)
      * @param rot rotation in radians of the sprite around it's center (0 for no rotation)
      * @param id 32-bit id associated with the sprite
-     * @param transparentID if true the sprite will output the id even if sprite is stansparent (default == true)
      */
-    default void drawRectRot(Rectanglef rect, Color color, float glow, float rot, int id, boolean transparentID) {
-        drawSpriteSuper(null,rect.minX,rect.minY,rect.maxX,rect.maxY,0,0,1,1,color,glow,rot,id,transparentID,false);
+    default void drawRectRot(Rectanglef rect, Color color, float glow, float rot, int id) {
+        drawSpriteSuper(null,rect.minX,rect.minY,rect.maxX,rect.maxY,0,0,1,1,color,glow,rot,id,true,false);
     }
     /** {@link #drawRectRot(float, float, float, float, Color, float, float, int, boolean)} */
     default void drawRect(float x, float y, float w, float h, Color color) { drawRectRot(x,y,w,h,color,0,0,0,true); }
@@ -357,7 +405,6 @@ public interface JuiGFX extends Disposable {
 
 
     void drawSpriteSuper(Texture texture, float x1, float y1, float x2, float y2, float u, float v, float u2, float v2, Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA);
-
 
 
 

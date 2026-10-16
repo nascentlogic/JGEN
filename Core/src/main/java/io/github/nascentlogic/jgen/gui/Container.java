@@ -122,6 +122,7 @@ public class Container {
     }
     /** True if no element is placed in the container */
     public boolean isEmpty() { return itemCount == 0; }
+    public boolean isFull() { return availableSpace() == 0f; }
     /** If the container is absolute */
     public boolean isAbsolute() { return requestedSize == SIZE_ABSOLUTE; }
     /** Main-axis space consumed so far (content + inserted spacings). */

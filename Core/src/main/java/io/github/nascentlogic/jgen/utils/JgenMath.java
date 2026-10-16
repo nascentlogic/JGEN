@@ -1,6 +1,7 @@
 package io.github.nascentlogic.jgen.utils;
 
 import org.joml.Matrix4f;
+import org.joml.primitives.Rectanglef;
 
 /**
  * F.Dahl, 5/8/2026

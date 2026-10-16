@@ -8,6 +8,8 @@ layout (location = 1) in vec4 aColor; // color
 #define LAST_CHAR 126u
 
 uniform vec2 uResolution;
+uniform float uScale; // <--- global UI scale multiplier
+
 
 // tl------tr
 // |        |
@@ -74,22 +76,31 @@ VertexData unpackVertexData(float floatBits) {
     return data;
 }
 
-TextureRegion generateRegion(Glyph glyph, vec2 penPos, float scale) {
+TextureRegion generateRegion(Glyph glyph, vec2 penPos, float fontScale) {
     TextureRegion region;
     float u1 = glyph.uvCoords.x; // left
     float v1 = glyph.uvCoords.y; // top
     float u2 = glyph.uvCoords.z; // right
     float v2 = glyph.uvCoords.w; // bottom
-    vec2 size   = glyph.size * scale;
-    vec2 offset = glyph.offset * scale; // pen → bottom-left
+    vec2 size   = glyph.size * fontScale;
+    vec2 offset = glyph.offset * fontScale; // pen → bottom-left
     vec2 bl = penPos + offset;
     vec2 br = bl + vec2(size.x, 0.0);
     vec2 tl = bl + vec2(0.0, size.y);
     vec2 tr = bl + size;
-    region.pos[0] = (bl / uResolution) * 2.0 - 1.0;
-    region.pos[1] = (br / uResolution) * 2.0 - 1.0;
-    region.pos[2] = (tl / uResolution) * 2.0 - 1.0;
-    region.pos[3] = (tr / uResolution) * 2.0 - 1.0;
+
+
+    // CRITICAL: Multiply virtual positions by global 'scale' to get physical pixels,
+    // then map to NDC using physical uResolution.
+    region.pos[0] = ((bl * uScale) / uResolution) * 2.0 - 1.0;
+    region.pos[1] = ((br * uScale) / uResolution) * 2.0 - 1.0;
+    region.pos[2] = ((tl * uScale) / uResolution) * 2.0 - 1.0;
+    region.pos[3] = ((tr * uScale) / uResolution) * 2.0 - 1.0;
+    // region.pos[0] = (bl / uResolution) * 2.0 - 1.0;
+    // region.pos[1] = (br / uResolution) * 2.0 - 1.0;
+    // region.pos[2] = (tl / uResolution) * 2.0 - 1.0;
+    // region.pos[3] = (tr / uResolution) * 2.0 - 1.0;
+
     region.uvs[0] = vec2(u1, v2); // bl
     region.uvs[1] = vec2(u2, v2); // br
     region.uvs[2] = vec2(u1, v1); // tl
@@ -97,13 +108,22 @@ TextureRegion generateRegion(Glyph glyph, vec2 penPos, float scale) {
     return region;
 }
 
+vec3 srgbToLinear(vec3 c) {
+    vec3 cutoff = vec3(lessThanEqual(c, vec3(0.04045)));
+    vec3 higher = pow((c + 0.055) / 1.055, vec3(2.4));
+    vec3 lower = c / 12.92;
+    return mix(higher, lower, cutoff);
+}
+
 void main() {
 
     const float ALPHA_SCALE = 255.0 / 254.0;
-    vec4 color = aColor;
-    color.a *= ALPHA_SCALE;
+    vec3 rgb = srgbToLinear(aColor.rgb);
+    float a = aColor.a * ALPHA_SCALE;
+    vec4 color = vec4(rgb,a);
 
-    vec2 penScreenPos = aVertex.xy;
+
+    vec2 penScreenPos = aVertex.xy; // not scaled by ui
     float glyphDataPacked = aVertex.z;
     VertexData vertexData = unpackVertexData(glyphDataPacked);
     Font font = textBlock.fonts[vertexData.font];
@@ -119,18 +139,22 @@ void main() {
         isCursor = false;
     }
 
-    float scale = float(vertexData.gSize) / font.size;
+    float fontScale = float(vertexData.gSize) / font.size;
 
     CharData charData;
-    charData.region = generateRegion(glyph, penScreenPos, scale);
+    charData.region = generateRegion(glyph, penScreenPos, fontScale);
     charData.color = color;
     charData.font = vertexData.font;
     charData.outline = (vertexData.outline == 1u);
     charData.glow = float(vertexData.glow) / 4095.0;
 
+    // CRITICAL: screenPxRange must account for BOTH the font's internal scale
+    // AND the global UI scale, so the fragment shader's edge smoothing remains crisp.
+    charData.screenPxRange = (font.msdfRange * 2.0) * fontScale * uScale;
+    charData.dfPixelRange = font.msdfRange * 2.0; // Base atlas range remains constant <---- may be wrong (not using it in the frag shader currently)
+    // charData.screenPxRange = (font.msdfRange * 2.0) * fontScale;
+    // charData.dfPixelRange = font.msdfRange * 2.0;
 
-    charData.screenPxRange = (font.msdfRange * 2.0) * scale;
-    charData.dfPixelRange = font.msdfRange * 2.0;
     charData.cursor = isCursor;
     vsOut.character = charData;
 

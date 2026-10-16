@@ -1,10 +1,11 @@
 layout (location=0) in vec2 aPos;   // gui screen position
 layout (location=1) in vec2 aUV;    // UV coordinates
-layout (location=2) in vec4 aColor; // linear RGBA color (samples are linear)
+layout (location=2) in vec4 aColor; // sRGB format
 layout (location=3) in float aId;   // Pixel ID used for mouse picking
 layout (location=4) in float aData; // texture slot ++
 
 uniform vec2 uResolution;
+uniform float uScale;
 
 struct VertexData {
     uint textureSlot;
@@ -34,6 +35,13 @@ out VSOUT {
     flat bool transparentID;
 } vsOut;
 
+vec3 srgbToLinear(vec3 c) {
+    vec3 cutoff = vec3(lessThanEqual(c, vec3(0.04045)));
+    vec3 higher = pow((c + 0.055) / 1.055, vec3(2.4));
+    vec3 lower = c / 12.92;
+    return mix(higher, lower, cutoff);
+}
+
 void main() {
     vsOut.pixelID = floatBitsToUint(aId);
     VertexData data = unpackVertexData(aData);
@@ -42,10 +50,21 @@ void main() {
     vsOut.antiAlias = (data.antiAlias > 0u);
     vsOut.transparentID = (data.transparentID > 0u);
 
-    vsOut.color = aColor;
-    vsOut.pos = aPos;
+    vec3 rgb = srgbToLinear(aColor.rgb);
+    float a = aColor.a * (255.0/254.0);
+    vsOut.color = vec4(rgb,a);
+
+    /*
+        // aPos is in virtual space (0 to 960)
+        // scale is 2.0
+        // uResolution is physical (1920)
+        vec2 physicalPos = aPos * scale; // 960 * 2.0 = 1920 (maps back to physical pixels)
+        vec2 ndc = (physicalPos / uResolution) * 2.0 - 1.0;
+    */
+
+    vec2 pos = aPos * uScale;
+    vsOut.pos = pos;
     vsOut.uv = aUV;
-    vsOut.color.a *= (255.0/254.0);
-    vec2 ndc = (aPos / uResolution) * 2.0 - 1.0;
+    vec2 ndc = (pos / uResolution) * 2.0 - 1.0;
     gl_Position = vec4(ndc,0.0,1.0);
 }

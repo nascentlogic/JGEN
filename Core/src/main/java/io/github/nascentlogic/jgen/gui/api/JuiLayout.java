@@ -1,6 +1,7 @@
 package io.github.nascentlogic.jgen.gui.api;
 
 import io.github.nascentlogic.jgen.gui.Container;
+import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.joml.primitives.Rectanglef;
 
 import java.util.Objects;
@@ -104,17 +105,22 @@ public interface JuiLayout {
      * if the size is greater than the containers remaining space, it
      * will simply over-allocate. Which is fine.
      * The container content size is not actually modified before it "pops/ends" */
-    Rectanglef allocateSpace(float size, Rectanglef dst);
+    Rectanglef allocate(float size, Rectanglef dst);
+
+    default void allocateVoid(float space) {
+        allocate(space, JgenUtils.pushRect());
+        JgenUtils.popRect();
+    }
     /** Allocate {@code count} fixed size space on the current container.
      * size is allocated along the containers axis.
      * using up all space across the containers cross-axis.
      * if the size is greater than the containers remaining space, it
      * will simply over-allocate. Which is fine.
      * The container content size is not actually modified before it "pops/ends" */
-    default Rectanglef[] allocateSpace(float size, Rectanglef[] dst, int count) {
+    default Rectanglef[] allocate(float size, Rectanglef[] dst, int count) {
         Objects.checkFromIndexSize(0, count, dst.length);
         for (int i = 0; i < count; i++) {
-            allocateSpace(size, dst[i]);
+            allocate(size, dst[i]);
         } return dst;
     }
     /** Allocate size equal the remaining space of the current container.

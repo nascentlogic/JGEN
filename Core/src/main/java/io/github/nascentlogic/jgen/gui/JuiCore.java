@@ -33,6 +33,7 @@ import static org.lwjgl.opengl.GL30.*;
  */
 public class JuiCore implements JuiState, JuiLayout, JuiGFX {
 
+
     private static final int DEFERRED_QUEUE_CAP     = 512;
     private static final int CONTAINER_STACK_CAP    = 128;
     private static final int SCISSOR_STACK_CAP      = 64;
@@ -50,6 +51,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     private final SpriteBatch spriteBatch;
     private final DeferredCalls deferredCalls;
     private final TextProcessor textProcessor;
+    private final ScissorStack scissorStack;
 
     // WINDOW MANAGEMENT
     private final TreeMap<Integer, List<JuiWindow>> layers = new TreeMap<>();
@@ -76,36 +78,46 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     private int spritesRenderedHigh;
     private int deferredCallsMax;
 
-    private  int hoveredID           = NULL;
-    private  int pressedID           = NULL;
-    private  int selectedID          = NULL;
-    private  int draggedID           = NULL;
-    private  int focusedID           = NULL;
-    private  int focusRequest        = NULL;
+    // Double Click
+    private int doubleClickedID     = NULL;
+    private int storedPressID       = NULL;
+    private int storedPressBtn      = MOUSE_NONE;
+    private long storedPressTimeNS  = 0L;
+    private boolean suppressNextClick = false;
 
-    private  int lastHoveredID       = NULL;
-    private  int lastPressedID       = NULL;
-    private  int lastDraggedID       = NULL;
-    private  int lastFocusedID       = NULL;
+    private int hoveredID           = NULL;
+    private int pressedID           = NULL;
+    private int clickedID           = NULL;
+    private int draggedID           = NULL;
+    private int focusedID           = NULL;
+    private int focusRequest        = NULL;
 
-    private  int activeMouseBtn      = MOUSE_NONE;
-    private  int lastActiveMouseBtn  = MOUSE_NONE;
-    private  int navigationBtn       = NULL;
+    private int lastHoveredID       = NULL;
+    private int lastPressedID       = NULL;
+    private int lastDraggedID       = NULL;
+    private int lastFocusedID       = NULL;
 
-    private  long hoveredDurationNS  = 0L;
-    private  long pressedDurationNS  = 0L;
-    private  long focusedDurationNS  = 0L;
+    private int activeMouseBtn      = MOUSE_NONE;
+    private int lastActiveMouseBtn  = MOUSE_NONE;
+    private int navigationBtn       = NULL;
 
-    private  float mousePositionX    = 0.0f;
-    private  float mousePositionY    = 0.0f;
-    private  float mousePressOriginX = 0.0f;
-    private  float mousePressOriginY = 0.0f;
-    private  float mouseFrameDeltaX  = 0.0f;
-    private  float mouseFrameDeltaY  = 0.0f;
-    private  float mouseDragVectorX  = 0.0f;
-    private  float mouseDragVectorY  = 0.0f;
-    private  float mouseLastFrameX   = 0.0f;
-    private  float mouseLastFrameY   = 0.0f;
+    private long hoveredDurationNS  = 0L;
+    private long pressedDurationNS  = 0L;
+    private long focusedDurationNS  = 0L;
+
+    private float mouseScroll       = 0.0f;
+    private float mousePositionX    = 0.0f;
+    private float mousePositionY    = 0.0f;
+    private float mousePressOriginX = 0.0f;
+    private float mousePressOriginY = 0.0f;
+    private float mouseFrameDeltaX  = 0.0f;
+    private float mouseFrameDeltaY  = 0.0f;
+    private float mouseDragVectorX  = 0.0f;
+    private float mouseDragVectorY  = 0.0f;
+    private float mouseLastFrameX   = 0.0f;
+    private float mouseLastFrameY   = 0.0f;
+
+    private float scale              = 2.0f;
 
 
     public JuiCore() throws Exception {
@@ -118,12 +130,13 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         spriteBatch = new SpriteBatch(gameW,gameH);
         textProcessor = new TextProcessor(fontLibrary);
         deferredCalls = new DeferredCalls();
+        scissorStack = new ScissorStack(SCISSOR_STACK_CAP);
         reset();
     }
 
     public void free() {
         for (var entry : windowRegistry.entrySet()) {
-            entry.getValue().onExit();
+            entry.getValue().onExit(this);
         } Disposable.free(
                 fontLibrary,
                 textBatch,
@@ -136,7 +149,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     public Texture render() {
         if (rendering) throw new IllegalStateException("gui already rendering");
         if (idStackDepth != 0) throw new IllegalStateException("Mismatched gui id stack depth");
-        if (scissorStackDepth != 0) throw new IllegalStateException("Mismatched gui container stack depth");
+        if (scissorStack.depth() != 0) throw new IllegalStateException("Mismatched gui container stack depth");
         if (containerStackDepth != 0) throw new IllegalStateException("Mismatched gui container stack depth");
 
 
@@ -155,12 +168,14 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         lastActiveMouseBtn = activeMouseBtn;
         // Reset single-frame pulse events
         navigationBtn = NULL;
-        selectedID = NULL;
+        clickedID = NULL;
+        doubleClickedID = NULL;
         // mouse variables
+        mouseScroll = mouse.scrollValue();
         mouseLastFrameX = mousePositionX;
         mouseLastFrameY = mousePositionY;
-        mousePositionX = mouse.position().x;
-        mousePositionY = mouse.position().y;
+        mousePositionX = mouse.position().x / scale;
+        mousePositionY = mouse.position().y / scale;
         mouseFrameDeltaX = mousePositionX - mouseLastFrameX;
         mouseFrameDeltaY = mousePositionY - mouseLastFrameY;
         // =============================================================================
@@ -168,11 +183,17 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         // =============================================================================
         if (pressedID != NULL && activeMouseBtn != MOUSE_NONE) {
             if (mouse.justReleased(activeMouseBtn)) {
-                // Register a selection click ONLY if it wasn't converted into a drag operation
-                if (hoveredID == pressedID && draggedID == NULL) selectedID = pressedID;
+                // Register a click ONLY if it wasn't converted into a drag operation
+                if (hoveredID == pressedID && draggedID == NULL) {
+                    if (!suppressNextClick) {
+                        // First click release fires normally
+                        clickedID = pressedID;
+                    }
+                }
                 draggedID = NULL;
                 pressedID = NULL;
                 activeMouseBtn = MOUSE_NONE;
+                suppressNextClick = false;
             }
         }
         // =============================================================================
@@ -181,8 +202,21 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         if (pressedID == NULL && hoveredID != NULL) {
             for (int button = 0; button < MOUSE_BUTTONS; button++) {
                 if (mouse.justPressed(button)) {
+                    // Evaluate if this press qualifies as a double-click
+                    boolean dClickTimeWindow = storedPressTimeNS <= DOUBLE_CLICK_THRESHOLD_NS;
+                    boolean dClickCanditate = hoveredID == storedPressID && button == storedPressBtn;
+                    if (dClickCanditate && dClickTimeWindow) {
+                        doubleClickedID = hoveredID;
+                        suppressNextClick = true; // Prevents the upcoming second release from firing a single click
+                        storedPressID = NULL; // Reset so a 3rd click starts a fresh cycle
+                    } else { // Not a double-click
+                        storedPressID = hoveredID;
+                        storedPressBtn = button;
+                    }
                     pressedID = hoveredID;
                     activeMouseBtn = button;
+                    storedPressTimeNS = 0L;
+
                     mousePressOriginX = mousePositionX;
                     mousePressOriginY = mousePositionY;
                     mouseDragVectorX = 0f;
@@ -212,7 +246,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
 
         if (focusedID != NULL) {
             if (keys.justPressed(GLFW.GLFW_KEY_ENTER)) {
-                selectedID = focusedID;
+                clickedID = focusedID;
                 navigationBtn = NAV_SELECT;
             } else if (keys.justPressed(GLFW.GLFW_KEY_UP)) {
                 navigationBtn = NAV_UP;
@@ -237,6 +271,9 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         hoveredDurationNS = (hoveredID != NULL && hoveredID == lastHoveredID) ? hoveredDurationNS + deltaTimeNS : 0L;
         pressedDurationNS = (pressedID != NULL && pressedID == lastPressedID) ? pressedDurationNS + deltaTimeNS : 0L;
         focusedDurationNS = (focusedID != NULL && focusedID == lastFocusedID) ? focusedDurationNS + deltaTimeNS : 0L;
+        storedPressTimeNS  = (storedPressID != NULL)                          ? storedPressTimeNS + deltaTimeNS : 0L;
+        if (storedPressTimeNS > DOUBLE_CLICK_THRESHOLD_NS) storedPressID = NULL;
+
 
         // Resize to game resolution (rare, if ever)
         int gameW = Jgen.get().window().gameResolutionWidth();
@@ -246,9 +283,11 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         if (gameW != buffW || gameH != buffH) {
             Disposable.free(framebuffer);
             framebuffer = createFramebuffer(gameW,gameH);
-            spriteBatch.onResize(gameW,gameH);
-            textBatch.onResize(gameW,gameH);
         }
+        spriteBatch.uploadUniforms(gameW,gameH,scale);
+        textBatch.uploadUniforms(gameW,gameH,scale);
+
+
         framebuffer.bindDraw();
         framebuffer.viewport();
         framebuffer.drawbuffers(0,1);
@@ -326,7 +365,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
             glEnable(GL_BLEND);
             glBlendEquation(GL_FUNC_ADD);
             glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
-            scissorUseCurrent();
+            scissorStack.useCurrent();
             fontLibrary.bindTextures(0);
             fontLibrary.ubo().bindBufferBase(TEXT_BLOCK_BINDING);
             rendererPaused = false;
@@ -341,10 +380,10 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         if (rendering) throw new IllegalStateException("Cannot reset Jui while rendering!");
 
         deferredCalls.clear();
-        for (int i = 0; i < SCISSOR_STACK_CAP; i++)     scissorStack[i] = new Rectanglei();
+
         for (int i = 0; i < CONTAINER_STACK_CAP; i++) containerStack[i] = new Container();
         containerStackDepth = 0;
-        scissorStackDepth   = 0;
+
         idStackDepth        = 0;
 
         frameCounter        = 0;
@@ -356,9 +395,16 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         spritesRenderedHigh = 0;
         deferredCallsMax    = 0;
 
+        // Double Click
+        doubleClickedID     = NULL;
+        storedPressID       = NULL;
+        storedPressBtn      = MOUSE_NONE;
+        storedPressTimeNS   = 0L;
+        suppressNextClick   = false;
+
         hoveredID           = NULL;
         pressedID           = NULL;
-        selectedID          = NULL;
+        clickedID           = NULL;
         draggedID           = NULL;
         focusedID           = NULL;
         focusRequest        = NULL;
@@ -376,6 +422,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         pressedDurationNS  = 0L;
         focusedDurationNS  = 0L;
 
+        mouseScroll         = 0.0f;
         mousePositionX      = 0.0f;
         mousePositionY      = 0.0f;
         mousePressOriginX   = 0.0f;
@@ -397,7 +444,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         focusedWindow       = null;
 
         for (var entry : windowRegistry.entrySet()) {
-            entry.getValue().onExit();
+            entry.getValue().onExit(this);
         }
         layers.clear();
         hiddenLayers.clear();
@@ -410,7 +457,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         framebuffer.clearColorUint(1, NULL);
     }
 
-    @Override
+
     public void drawSpriteSuper(Texture texture, float x1, float y1, float x2, float y2, float u, float v, float u2, float v2,
     Color color, float glow, float rot, int id, boolean transparentID, boolean pixelAAA) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
@@ -420,7 +467,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         }
     }
 
-    @Override
     public void drawLabel(CharSequence label, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -432,7 +478,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelFree(label,penX,penY,font,size,color,glow,outlined,out);
     }
 
-    @Override
     public void drawLabel(CharSequence label, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -444,7 +489,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelBound(label,bounds,font,color,glow,outlined,align,out);
     }
 
-   @Override
     public void drawLabelInt(int value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -455,7 +499,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelFreeInt(value,penX,penY,font,size,color,glow,outlined,out);
     }
 
-    @Override
     public void drawLabelInt(int value, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -466,7 +509,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelBoundInt(value,bounds,font,color,glow,outlined,align,out);
     }
 
-    @Override
     public void drawLabelFloat(double value, int deci, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -477,7 +519,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelFreeFloat(value,deci,penX,penY,font,size,color,glow,outlined,out);
     }
 
-    @Override
     public void drawLabelFloat(double value, int deci, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -488,7 +529,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelBoundFloat(value,deci,bounds,font,color,glow,outlined,align,out);
     }
 
-    @Override
     public void drawLabelBool(boolean value, float penX, float penY, int font, int size, Color color, float glow, boolean outlined) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -499,7 +539,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.labelFreeBool(value,penX,penY,font,size,color,glow,outlined,out);
     }
 
-    @Override
     public void drawLabelBool(boolean value, Rectanglef bounds, int font, Color color, float glow, boolean outlined, TextAlignment align) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -522,7 +561,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } textProcessor.textFree(text,penX,penY,font,size,color,glow,outlined,out);
     }
 
-    @Override
     public void drawText(CharSequence text, Rectanglef bounds, int font, int size, Color color, float glow, boolean outlined, boolean wrap) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(font,FontLibrary.MAX_FONT_SLOTS);
@@ -535,7 +573,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
 
     }
 
-    @Override
     public void drawTextField(Text text, TextLayout layout, float xOff, float yOff, Color color, float glow, boolean outlined, TextAlignment alignment) {
         if (!rendering || rendererPaused) throw new IllegalStateException("gui is paused or not in a rendering state!");
         Objects.checkIndex(layout.fontSlot(),FontLibrary.MAX_FONT_SLOTS);
@@ -552,8 +589,12 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         textProcessor.textLayout(text, bounds, font, size, wrap, dst); }
     public float textHeight(Text text, int font, int size) { return textProcessor.textHeight(text,font,size); }
 
-    public int resolutionWidth() { return framebuffer.width(); }
-    public int resolutionHeight() { return framebuffer.height(); }
+    public float scale() { return scale; }
+    public void setScale(float scale) { this.scale = Math.clamp(scale,0.5f,2.0f); }
+    public float virtualWidth() { return framebufferWidth() / scale; }
+    public float virtualHeight() { return framebufferHeight() / scale; }
+    public int framebufferWidth() { return framebuffer.width(); }
+    public int framebufferHeight() { return framebuffer.height(); }
 
     public int infoDrawCalls() { return drawCallsHigh; }
     public int infoSpritesRendered() { return spritesRenderedHigh; }
@@ -579,32 +620,18 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         } return true;
     }
 
-    private final Rectanglei[] scissorStack = new Rectanglei[SCISSOR_STACK_CAP];
-    private int scissorStackDepth = 0;
-    public void scissorPush(float x1, float y1, float x2, float y2) {
+
+    public void scissorPush(float x1, float y1, float x2, float y2, boolean intersection) {
         if (!rendering || rendererPaused) throw new IllegalStateException("can't push scissors while renderer is paused or not rendering!");
-        if (scissorStackDepth >= SCISSOR_STACK_CAP) throw new IllegalStateException("scissor stack overflow!");
         flushCurrentBatch(); // Always flush before state change
-        int minX = Math.max((int) Math.floor(Math.min(x1, x2)), 0);
-        int minY = Math.max((int) Math.floor(Math.min(y1, y2)), 0);
-        int maxX = Math.min((int) Math.ceil(Math.max(x1, x2)), framebuffer.width());
-        int maxY = Math.min((int) Math.ceil(Math.max(y1, y2)), framebuffer.height());
-        scissorStack[scissorStackDepth++].setMin(minX,minY).setMax(maxX,maxY);
-        scissorUseCurrent();
+        scissorStack.push(this,x1,y1,x2,y2,intersection);
     } public void scissorPop() {
         if (!rendering || rendererPaused) throw new IllegalStateException("can't pop scissors while renderer is paused or not rendering!");
-        if (scissorStackDepth <= 0) throw new IllegalStateException("scissor stack underflow!");
         flushCurrentBatch(); // Always flush before state change
-        scissorStackDepth--;
-        scissorUseCurrent();
-    } public int scissorStackSize() { return scissorStackDepth; }
-    private void scissorUseCurrent() {
-        if (scissorStackDepth <= 0) glDisable(GL_SCISSOR_TEST);
-        else { Rectanglei scissor = scissorStack[scissorStackDepth - 1];
-            glScissor(scissor.minX, scissor.minY, scissor.lengthX(), scissor.lengthY());
-            glEnable(GL_SCISSOR_TEST);
-        }
-    }
+        scissorStack.pop();
+    } public boolean scissorIntersects(Rectanglef rect) { return scissorStack.interects(this,rect); }
+    public int scissorStackDepth() { return scissorStack.depth(); }
+
 
 
     public void deferredEnable() { deferredState = true; }
@@ -628,12 +655,11 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     }
 
 
-
-
     public int currentHoveredID() { return hoveredID; }
     public int currentPressedID() { return pressedID; }
     public int currentDraggedID() { return draggedID; }
-    public int currentSelectedID() { return selectedID; }
+    public int currentClickedID() { return clickedID; }
+    public int currentDoubleClicked() { return doubleClickedID; }
     public int currentFocusedID() { return focusedID; }
     public int lastFrameHoveredID() { return lastHoveredID; }
     public int lastFramePressedID() { return lastPressedID; }
@@ -645,6 +671,8 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     public float hoveredDuration() { return (float) (hoveredDurationNS / 1_000_000_000d); }
     public float pressedDuration() { return (float) (pressedDurationNS / 1_000_000_000d); }
     public float focusedDuration() { return (float) (focusedDurationNS / 1_000_000_000d); }
+
+    public float mouseScroll() { return mouseScroll; }
     public float mousePosX() { return mousePositionX; }
     public float mousePosY() { return mousePositionY; }
     public float mousePressOriginX() { return mousePressOriginX; }
@@ -704,6 +732,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
             throw new IllegalArgumentException("jui window already registered for name: " + window.name());
         } windowRegistry.put(window.name(), window);
         layers.computeIfAbsent(layer, k -> new ArrayList<>()).add(window);
+        window.onRegister(this);
     }
     public void windowOpen(String name) {
         JuiWindow window = windowRegistry.get(name);
@@ -716,6 +745,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         JuiWindow window = windowRegistry.get(name);
         if (window != null) window.close();
     }
+
 
     public void windowClaimFocus() { focusedWindow = currentWindow; }
     public void windowLayerShow(int layer) { hiddenLayers.remove(layer); }
@@ -741,7 +771,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
         if (containerStackDepth == 0) {
             throw new IllegalStateException("container stack underflow!");
         } return containerStack[--containerStackDepth];
-    } public Rectanglef allocateSpace(float size, Rectanglef dst) {
+    } public Rectanglef allocate(float size, Rectanglef dst) {
         if (containerStackEmpty()) throw new IllegalStateException("empty container stack alloc!");
         if (size < 0.0f) throw new IllegalArgumentException("container negative size alloc!");
         return peekContainerUnchecked().allocate(size,dst);
@@ -951,6 +981,7 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
     }
 
 
+    // todo: Need a stack of queues, not just a simple queue
     private static final class DeferredCalls implements Iterable<DeferredCalls.DeferredCall> {
 
 
@@ -1133,9 +1164,10 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
             return tmp;
         }
 
-        void onResize(int width, int height) {
+        void uploadUniforms(int width, int height, float scale) {
             program.use();
             ShaderProgram.setUniformF("uResolution",width,height);
+            ShaderProgram.setUniformF("uScale",scale);
         }
 
         void flush() {
@@ -1250,9 +1282,10 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
             return tmp;
         }
 
-        void onResize(int width, int height) {
+        void uploadUniforms(int width, int height, float scale) {
             program.use();
             ShaderProgram.setUniformF("uResolution",width,height);
+            ShaderProgram.setUniformF("uScale",scale);
         }
 
         void push(Texture texture, float x1, float y1, float x2, float y2, float u1, float v1, float u2, float v2,
@@ -1342,4 +1375,6 @@ public class JuiCore implements JuiState, JuiLayout, JuiGFX {
             nextSlot = 0;
         }
     }
+
+
 }

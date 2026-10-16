@@ -5,6 +5,7 @@ import org.joml.*;
 import org.joml.primitives.Rectanglef;
 import org.joml.primitives.Rectanglei;
 
+import java.lang.Math;
 import java.util.function.Supplier;
 
 /**
@@ -15,6 +16,7 @@ public interface JuiState {
 
     int NULL                = 0;
     int DRAG_THRESHOLD      = 4;
+    long DOUBLE_CLICK_THRESHOLD_NS = 300_000_000L;
 
     int MOUSE_NONE          = -1;
     int MOUSE_LEFT          = Mouse.LEFT;
@@ -38,10 +40,10 @@ public interface JuiState {
     int PRESSED_R           = 1 << 4;
     int PRESSED_W           = 1 << 5;
     int PRESSED_JUST        = 1 << 6;
-    int SELECTED            = 1 << 7;
-    int SELECTED_L          = 1 << 8;
-    int SELECTED_R          = 1 << 9;
-    int SELECTED_W          = 1 << 10;
+    int CLICKED             = 1 << 7;
+    int CLICKED_L           = 1 << 8;
+    int CLICKED_R           = 1 << 9;
+    int CLICKED_W           = 1 << 10;
     int DRAGGED             = 1 << 11;
     int DRAGGED_L           = 1 << 12;
     int DRAGGED_R           = 1 << 13;
@@ -58,12 +60,17 @@ public interface JuiState {
     int RELEASED_DRAG_L     = 1 << 24;
     int RELEASED_DRAG_R     = 1 << 25;
     int RELEASED_DRAG_W     = 1 << 26;
+    int DOUBLE_CLICKED      = 1 << 27;
+    int DOUBLE_CLICKED_L    = 1 << 28;
+    int DOUBLE_CLICKED_R    = 1 << 29;
+    int DOUBLE_CLICKED_W    = 1 << 30;
 
 
     int currentHoveredID();
     int currentPressedID();
     int currentDraggedID();
-    int currentSelectedID();
+    int currentClickedID();
+    int currentDoubleClicked();
     int currentFocusedID();
 
     int lastFrameHoveredID();
@@ -78,7 +85,12 @@ public interface JuiState {
     float hoveredDuration();
     float pressedDuration();
     float focusedDuration();
+    /** Max(pressed,hovered)*/
+    default float pressedHoveredDuration() {
+        return Math.max(hoveredDuration(),pressedDuration());
+    }
 
+    float mouseScroll();
     float mousePosX();
     float mousePosY();
     float mousePressOriginX();
@@ -94,6 +106,10 @@ public interface JuiState {
     default Vector2f mouseFrameDelta(Vector2f dst) { return dst.set(mouseFrameDeltaX(), mouseFrameDeltaY()); }
     default Vector2f mouseDragVector(Vector2f dst) { return dst.set(mouseDragVectorX(), mouseDragVectorY()); }
 
+
+    default boolean isPressedOrHovered(int id) { return isHovered(id) || isPressed(id); }
+    default boolean isPressedOrHovered(int id, int mouseBtn) { return isHovered(id) || isPressed(id,mouseBtn); }
+
     default boolean isHovered(int id) { return isValid(id) && isHoveredRaw(id); }
     default boolean isPressed(int id) {
         boolean pressed = isValid(id) && currentPressedID() == id;
@@ -101,7 +117,12 @@ public interface JuiState {
         return pressed;
     }
     default boolean isPressed(int id, int mouseBtn) { return isPressed(id) && mouseActiveBtn() == mouseBtn; }
-    default boolean isDragged(int id) { return isValid(id) && currentDraggedID() == id; }
+    default boolean isDragged(int id) {
+        boolean dragged = isValid(id) && currentDraggedID() == id;
+        if (dragged) windowClaimFocus();
+        return dragged;
+
+    }
     default boolean isDragged(int id, int mouseBtn) { return isDragged(id) && mouseActiveBtn() == mouseBtn; }
     default boolean isFocused(int id) {
         boolean focused = isValid(id) && currentFocusedID() == id;
@@ -109,14 +130,37 @@ public interface JuiState {
         return focused;
     }
 
+    // aby
+    default boolean anyHovered() { return currentHoveredID() != NULL; }
+    default boolean anyPressed() { return currentPressedID() != NULL; }
+    default boolean anyDragged() { return currentDraggedID() != NULL; }
+    default boolean anyJustClicked() { return currentClickedID() != NULL; }
+    default boolean anyDoubleClicked() { return currentDoubleClicked() != NULL; }
+    default boolean anyFocused() { return currentFocusedID() != NULL; }
+
     // impulses
+    default boolean justScrolled() { return mouseScroll() != 0.0f; }
     default boolean justHovered(int id) { return isHovered(id) && !wasHoveredRaw(id); }
     default boolean justPressed(int id) { return isPressed(id) && currentPressedID() != lastFramePressedID(); }
     default boolean justPressed(int id, int mouseBtn) { return isPressed(id, mouseBtn) && currentPressedID() != lastFramePressedID(); }
     default boolean justDragged(int id) { return isDragged(id) && lastFrameDraggedID() != id; }
     default boolean justDragged(int id, int mouseBtn) { return justDragged(id) && mouseActiveBtn() == mouseBtn; }
-    default boolean justSelected(int id) { return isValid(id) && currentSelectedID() == id; }
-    default boolean justSelected(int id, int mouseBtn) { return justSelected(id) && mouseLastActiveBtn() == mouseBtn; }
+    default boolean justClicked(int id) {
+        boolean clicked =  isValid(id) && currentClickedID() == id;
+        if (clicked) windowClaimFocus();
+        return clicked;
+    }
+
+    default boolean justDoubleClicked(int id) {
+        boolean clicked =  isValid(id) && currentDoubleClicked() == id;
+        if (clicked) windowClaimFocus();
+        return clicked;
+    }
+
+    // todo just scolled etc. (consume scrollamount?) --------------------------------------
+
+    default boolean justDoubleClicked(int id, int mouseBtn) { return justDoubleClicked(id) && mouseActiveBtn() == mouseBtn; }
+    default boolean justClicked(int id, int mouseBtn) { return justClicked(id) && mouseLastActiveBtn() == mouseBtn; }
     default boolean justFocused(int id) { return isFocused(id) && currentFocusedID() != lastFrameFocusedID(); }
     default boolean justLostFocus(int id) { return isValid(id) && lastFrameFocusedID() == id && currentFocusedID() != lastFrameFocusedID(); }
     default boolean justReleased(int id) { return isValid(id) && lastFramePressedID() == id && currentPressedID() != id; }
@@ -183,6 +227,14 @@ public interface JuiState {
                     case MOUSE_WHEEL ->  mask |= DRAGGED_W;
                 }
             }
+            if (currentDoubleClicked() == id) {
+                mask |= DOUBLE_CLICKED;
+                switch (mouseActiveBtn()) {
+                    case MOUSE_LEFT  ->  mask |= DOUBLE_CLICKED_L;
+                    case MOUSE_RIGHT ->  mask |= DOUBLE_CLICKED_R;
+                    case MOUSE_WHEEL ->  mask |= DOUBLE_CLICKED_W;
+                }
+            }
         } else if (lastFramePressedID() == id) {
             mask |= RELEASED_PRESS;
             switch (mouseLastActiveBtn()) {
@@ -199,12 +251,12 @@ public interface JuiState {
                 }
             }
         }
-        if (currentSelectedID() == id) {
-            mask |= SELECTED;
+        if (currentClickedID() == id) {
+            mask |= CLICKED;
             switch (mouseLastActiveBtn()) {
-                case MOUSE_LEFT  ->  mask |= SELECTED_L;
-                case MOUSE_RIGHT ->  mask |= SELECTED_R;
-                case MOUSE_WHEEL ->  mask |= SELECTED_W;
+                case MOUSE_LEFT  ->  mask |= CLICKED_L;
+                case MOUSE_RIGHT ->  mask |= CLICKED_R;
+                case MOUSE_WHEEL ->  mask |= CLICKED_W;
             }
         }
         if (currentFocusedID() == id) {

@@ -5,7 +5,7 @@ uniform sampler2D[8] uTextures; // samples are linear
 
 in VSOUT {
     flat vec4 color; // straight linear color
-    vec2 pos;
+    vec2 pos; // unused atm (be vary of global UI scaling. Applied)
     vec2 uv;
     flat uint pixelID;
     flat uint texSlot;

@@ -3,6 +3,7 @@ package io.github.nascentlogic.jgen.gfx;
 import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import io.github.nascentlogic.jgen.utils.JgenUtils;
 import org.joml.Vector4f;
 
 import java.io.IOException;
@@ -17,33 +18,42 @@ import static io.github.nascentlogic.jgen.utils.JgenMath.clamp;
  */
 public class Color {
 
-    public static final Color CLEAR       = new Color(0f, 0f, 0f, 0f);
-    public static final Color BLACK       = new Color(0f, 0f, 0f, 1f);
-    public static final Color WHITE       = new Color(1f, 1f, 1f, 1f);
-    public static final Color RED         = new Color(1f, 0f, 0f, 1f);
-    public static final Color GREEN       = new Color(0f, 1f, 0f, 1f);
-    public static final Color BLUE        = new Color(0f, 0f, 1f, 1f);
-    public static final Color YELLOW      = new Color(1f, 1f, 0f, 1f);
-    public static final Color CYAN        = new Color(0f, 1f, 1f, 1f);
-    public static final Color MAGENTA     = new Color(1f, 0f, 1f, 1f);
+
+    public static final Color CLEAR       = new Color("00000000");
+    public static final Color BLACK       = new Color("000000FF");
+    public static final Color WHITE       = new Color("FFFFFFFF");
+    public static final Color RED         = new Color("FF0000FF");
+    public static final Color GREEN       = new Color("00FF00FF");
+    public static final Color BLUE        = new Color("0000FFFF");
+    public static final Color YELLOW      = new Color("FFFF00FF");
+    public static final Color CYAN        = new Color("00FFFFFF");
+    public static final Color MAGENTA     = new Color("FF00FFFF");
 
     private float r, g, b, a;  // linear
-    transient private float p; // packed
-    transient private boolean d = true;
+    private transient float p; // packed
+    private transient boolean d = true;
+    private transient final Vector4f oklab = new Vector4f();
 
-    public Color() { set(1,1,1,1); }
+    public Color() { r = 1.0f; g = 1.0f; b = 1.0f; a = 1.0f; d = true; }
     public Color(Color color) { set(color); }
-    /** sRGB hex value --> linear Color */
-    public Color(String hex) { setHex(hex); }
-    public Color(int intBits) { setIntBits(intBits); }
-    public Color(float r, float g, float b, float a) { set(r, g, b, a); }
+    public Color(String hex) { set(hex); }
+    public Color(int r, int g, int b, int a) { setSrgb(r, g, b, a); }
 
-    public Color set(Color color) { return set(color.r,color.g,color.b,color.a); }
+    public Color set(Color color) {
+        oklab.set(color.oklab);
+        r = color.r;
+        g = color.g;
+        b = color.b;
+        a = color.a;
+        p = color.p;
+        d = color.d;
+        return this;
+    }
     public Color setR(float r) { this.r = clamp(r); d = true; return this; }
     public Color setG(float g) { this.g = clamp(g); d = true; return this; }
     public Color setB(float b) { this.b = clamp(b); d = true; return this; }
     public Color setA(float a) { this.a = clamp(a); d = true; return this; }
-    public Color set(float r, float g, float b, float a) {
+    public Color setLinear(float r, float g, float b, float a) {
         this.r = clamp(r);
         this.g = clamp(g);
         this.b = clamp(b);
@@ -52,11 +62,29 @@ public class Color {
         return this;
     }
 
+    public Color setRBits(int r) { this.r = srgbToLinear((r & 0xFF) / 255f); d = true; return this; }
+    public Color setGBits(int g) { this.g = srgbToLinear((g & 0xFF) / 255f); d = true; return this; }
+    public Color setBBits(int b) { this.b = srgbToLinear((b & 0xFF) / 255f); d = true; return this; }
+    public Color setABits(int a) { this.a = (a & 0xFF) / 255f; d = true; return this; }
+    public Color setSrgb(int r, int g, int b, int a) {
+        this.r = srgbToLinear((r & 0xFF) / 255f);
+        this.g = srgbToLinear((g & 0xFF) / 255f);
+        this.b = srgbToLinear((b & 0xFF) / 255f);
+        this.a = (a & 0xFF) / 255f;
+        this.d = true;
+        return this;
+    }
+
+    /** Sets this color from a sRGB Hex code string (e.g., "#FF0000") */
+    public Color set(String hex) { return fromHex(hex,this); }
+    /** Sets this color's channels using values from a JOML Vector4f (assumed Linear). */
+    public Color set(Vector4f vec) { return setLinear(vec.x, vec.y, vec.z, vec.w); }
+
     public Color setIntBits(int intBits) {
-        this.r = ((intBits)         & 0xFF) / 255f;
-        this.g = ((intBits >> 8)    & 0xFF) / 255f;
-        this.b = ((intBits >> 16)   & 0xFF) / 255f;
-        this.a = ((intBits >> 24)   & 0xFF) / 255f;
+        this.r = srgbToLinear(((intBits)         & 0xFF) / 255f);
+        this.g = srgbToLinear(((intBits >> 8)    & 0xFF) / 255f);
+        this.b = srgbToLinear(((intBits >> 16)   & 0xFF) / 255f);
+        this.a = ((intBits >> 24) & 0xFF) / 255f;
         this.d = true;
         return this;
     }
@@ -67,33 +95,7 @@ public class Color {
         return setIntBits(i);
     }
 
-    /**
-     * Sets this color from a sRGB Hex code string (e.g., "#FF0000")
-     */
-    public Color setHex(String hex) {
-        return fromHex(hex,this);
-    }
 
-    /**
-     * Sets this color from a raw Linear Hex code string without gamma alteration.
-     */
-    public Color setHexLinear(String hex) {
-        return fromHexLinear(hex, this);
-    }
-
-    /**
-     * Sets this color's channels using values from a JOML Vector4f (assumed Linear).
-     */
-    public Color setVec4(Vector4f vec) {
-        return set(vec.x, vec.y, vec.z, vec.w);
-    }
-
-    /**
-     * Sets this color from an RGBA float array at the specified offset.
-     */
-    public Color setArray(float[] src, int offset) {
-        return set(src[offset], src[offset + 1], src[offset + 2], src[offset + 3]);
-    }
 
     public Color add(Color other) { return add(this, other, this); }
     public Color sub(Color other) { return sub(this, other, this); }
@@ -106,88 +108,83 @@ public class Color {
     public Color div(float r, float g, float b, float a) { return div(this, r, g, b, a, this); }
 
     public Color scale(float scalar) { return scale(this,scalar,this); }
-    public Color scaleRgb(float scalar) { return scaleRgb(this,scalar,this); }
+    public Color brighten(float amount) { return brighten(this,amount,this); }
+    public Color darken(float amount) { return darken(this,amount,this); }
 
     public Color blend(Color other) {
         return blend(this,other,this);
     }
-
     /**
      * Linearly interpolates this color instance toward a target state.
      */
-    public Color lerp(Color target, float t) {
-        return lerpLinear(this, target, t, this);
-    }
-
-    /**
-     * Inverts all components
-     */
-    public Color invert() {
-        return set(1f - r, 1f - g, 1f - b, 1f - a);
-    }
-
+    public Color lerp(Color target, float t) { return lerpLinear(this, target, t, this); }
     /**
      * Inverts the RGB components while preserving the alpha channel.
      */
-    public Color invertRgb() {
-        return set(1f - r, 1f - g, 1f - b, a);
-    }
-
+    public Color invert() { return setLinear(1f - r, 1f - g, 1f - b, a); }
     /**
      * Premultiplies the color components by the alpha channel. (Irreversible)
      * Note: This keeps the alpha channel exactly as it is for the GPU blending track.
      */
-    public Color premultiplyAlpha() {
-        return set(r * a, g * a, b * a, a);
-    }
+    public Color premultiplyAlpha() { return setLinear(r * a, g * a, b * a, a); }
 
 
+    /** red component in linear floating point  format */
     public float r() { return r; }
+    /** green component in linear floating point format */
     public float g() { return g; }
+    /** blue component in linear floating point format */
     public float b() { return b; }
+    /** alpha component in floating point format (linear / sRGB agnostic)*/
     public float a() { return a; }
-
+    /** red component in sRGB floating point  format */
     public float sR() { return linearToSrgb(r); }
+    /** green component in sRGB floating point format */
     public float sG() { return linearToSrgb(g); }
+    /** blue component in sRGB floating point format */
     public float sB() { return linearToSrgb(b); }
+    /** alpha component in floating point format (linear / sRGB agnostic)*/
     public float sA() { return a; }
-
+    /** red component in sRGB integer format */
+    public int rBits() { return (int) (sR() * 255f) & 0xFF; }
+    /** green component in sRGB integer format */
+    public int gBits() { return (int) (sG() * 255f) & 0xFF; }
+    /** blue component in sRGB integer format */
+    public int bBits() { return (int) (sB() * 255f) & 0xFF; }
+    /** alpha component in integer format (linear / sRGB agnostic)*/
+    public int aBits() { return (int) ( a * 255f) & 0xFF; }
+    /** sRGB packed format for GPU transfer */
     public float packedFormat() {
-        if (d) { int i = intBits();
+        if (d) {
+            linearToOklab(this,oklab);
+            int i = intBits();
             p = Float.intBitsToFloat(i & 0xfeffffff);
             d = false;
         } return p;
     }
 
-    public int intBits() {
-        int rBits = (int) (r * 255f) & 0xFF;
-        int gBits = (int) (g * 255f) & 0xFF;
-        int bBits = (int) (b * 255f) & 0xFF;
-        int aBits = (int) (a * 255f) & 0xFF;
-        return rBits | (gBits << 8) | (bBits << 16) | (aBits << 24);
+    public Vector4f oklab() {
+        if (d) {
+            linearToOklab(this,oklab);
+            int i = intBits();
+            p = Float.intBitsToFloat(i & 0xfeffffff);
+            d = false;
+        } return oklab;
     }
 
-    /** Exposes the internal linear values directly into a provided destination vector. */
-    public Vector4f toVec4Rgba(Vector4f dst) {
-        return dst.set(r, g, b, a);
-    }
+    /** sRGB int bits */
+    public int intBits() { return rBits() | (gBits() << 8) | (bBits() << 16) | (aBits() << 24); }
 
-    public Vector4f toVec4Srgba(Vector4f dst) {
-        dst.x = linearToSrgb(r);
-        dst.y = linearToSrgb(g);
-        dst.z = linearToSrgb(b);
-        dst.w = a;
-        return dst;
-    }
-
-    /** Writes this Color into a float array at the specified offset in RGBA order. */
-    public void toArrayRgba(float[] dst, int offset) {
+    public Color fromArray(float[] src, int offset) { return setLinear(src[offset], src[offset + 1], src[offset + 2], src[offset + 3]); }
+    public void toArray(float[] dst, int offset) {
         dst[offset]     = r;
         dst[offset + 1] = g;
         dst[offset + 2] = b;
         dst[offset + 3] = a;
     }
 
+
+    // todo -----------------------
     /**
      * Converts this Linear Color into sRGB-space HSV (Hue, Saturation, Value) + Alpha.
      * Writes the results into the provided destination Vector4f to avoid allocation.
@@ -200,7 +197,7 @@ public class Color {
      * </ul>
      * @return The dst vector populated with HSV+A data.
      */
-    public Vector4f toVec4HSV(Vector4f dst) {
+    public Vector4f hsv(Vector4f dst) {
         float sR = linearToSrgb(r);
         float sG = linearToSrgb(g);
         float sB = linearToSrgb(b);
@@ -223,22 +220,10 @@ public class Color {
      * Useful for checking contrast ratios or applying grayscale effects.
      * @return A value between 0.0 (perceptually black) and 1.0 (perceptually bright white).
      */
-    public float luminance() {
-        // Exact linear coefficients from ITU-R BT.709
-        return 0.2126f * r + 0.7152f * g + 0.0722f * b;
-    }
+    public float luminance() { return 0.2126f * r + 0.7152f * g + 0.0722f * b; }
 
     @Override
-    public String toString() {
-        int bits = intBits();
-        return String.format("[%3d,%3d,%3d,%3d]",
-                (bits & 0xFF),
-                ((bits >> 8) & 0xFF),
-                ((bits >> 16) & 0xFF),
-                ((bits >> 24) & 0xFF)
-        );
-    }
-
+    public String toString() { return toHexString(); }
     /**
      * Converts the color into an sRGB Hex string representation format.
      */
@@ -250,17 +235,6 @@ public class Color {
         return String.format("#%02X%02X%02X%02X", rBits, gBits, bBits, aBits);
     }
 
-    /**
-     * Converts this color into a raw, un-de-gamma'd Linear Hex string format (#RRGGBBAA).
-     * Useful for direct debugging or logging exact component memory states.
-     */
-    public String toHexStringLinear() {
-        int rBits = (int) (r * 255f) & 0xFF;
-        int gBits = (int) (g * 255f) & 0xFF;
-        int bBits = (int) (b * 255f) & 0xFF;
-        int aBits = (int) (a * 255f) & 0xFF;
-        return String.format("#%02X%02X%02X%02X", rBits, gBits, bBits, aBits);
-    }
 
     @Override
     public boolean equals(Object obj) {
@@ -284,32 +258,17 @@ public class Color {
         return (c <= 0.0031308f) ? (c * 12.92f) : (float) (1.055 * Math.pow(c, 1.0 / 2.4) - 0.055);
     }
 
-    public static Vector4f srgbToLinear(Vector4f srgb, Vector4f dst) {
-        dst.x = srgbToLinear(srgb.x);
-        dst.y = srgbToLinear(srgb.y);
-        dst.z = srgbToLinear(srgb.z);
-        dst.w = clamp(srgb.w);
-        return dst;
-    }
-
-    public static Vector4f linearToSrgb(Vector4f linear, Vector4f dst) {
-        dst.x = linearToSrgb(linear.x);
-        dst.y = linearToSrgb(linear.y);
-        dst.z = linearToSrgb(linear.z);
-        dst.w = clamp(linear.w);
-        return dst;
-    }
 
     public static Color add(Color src, Color other, Color dst) {
-        return dst.set(src.r + other.r, src.g + other.g, src.b + other.b, src.a + other.a);
+        return dst.setLinear(src.r + other.r, src.g + other.g, src.b + other.b, src.a + other.a);
     }
 
     public static Color sub(Color src, Color other, Color dst) {
-        return dst.set(src.r - other.r, src.g - other.g, src.b - other.b, src.a - other.a);
+        return dst.setLinear(src.r - other.r, src.g - other.g, src.b - other.b, src.a - other.a);
     }
 
     public static Color mul(Color src, Color other, Color dst) {
-        return dst.set(src.r * other.r, src.g * other.g, src.b * other.b, src.a * other.a);
+        return dst.setLinear(src.r * other.r, src.g * other.g, src.b * other.b, src.a * other.a);
     }
 
     public static Color div(Color src, Color other, Color dst) {
@@ -317,19 +276,19 @@ public class Color {
         float g = other.g == 0f ? 0f : src.g / other.g;
         float b = other.b == 0f ? 0f : src.b / other.b;
         float a = other.a == 0f ? 0f : src.a / other.a;
-        return dst.set(r, g, b, a);
+        return dst.setLinear(r, g, b, a);
     }
 
     public static Color add(Color src, float r, float g, float b, float a, Color dst) {
-        return dst.set(src.r + r, src.g + g, src.b + b, src.a + a);
+        return dst.setLinear(src.r + r, src.g + g, src.b + b, src.a + a);
     }
 
     public static Color sub(Color src, float r, float g, float b, float a, Color dst) {
-        return dst.set(src.r - r, src.g - g, src.b - b, src.a - a);
+        return dst.setLinear(src.r - r, src.g - g, src.b - b, src.a - a);
     }
 
     public static Color mul(Color src, float r, float g, float b, float a, Color dst) {
-        return dst.set(src.r * r, src.g * g, src.b * b, src.a * a);
+        return dst.setLinear(src.r * r, src.g * g, src.b * b, src.a * a);
     }
 
     public static Color div(Color src, float r, float g, float b, float a, Color dst) {
@@ -337,16 +296,46 @@ public class Color {
         float outG = g == 0f ? 0f : src.g / g;
         float outB = b == 0f ? 0f : src.b / b;
         float outA = a == 0f ? 0f : src.a / a;
-        return dst.set(outR, outG, outB, outA);
-    }
-
-    public static Color scaleRgb(Color src, float scalar, Color dst) {
-        return dst.set(src.r * scalar, src.g * scalar, src.b * scalar, src.a);
+        return dst.setLinear(outR, outG, outB, outA);
     }
 
     public static Color scale(Color src, float scalar, Color dst) {
-        return dst.set(src.r * scalar, src.g * scalar, src.b * scalar, src.a * scalar);
+        return dst.setLinear(src.r * scalar, src.g * scalar, src.b * scalar, src.a);
     }
+    public static Color brighten(Color src, float amount, Color dst) {
+        if (amount <= 0f) return dst.set(src);
+        if (amount >= 1f) return dst.setLinear(1f, 1f, 1f, src.a);
+        Vector4f lab = src.oklab();
+        dst.oklab.set(lab);
+        dst.oklab.x = Math.min(1.0f, dst.oklab.x + amount);
+        return oklabToLinear(dst.oklab, dst);
+    }
+
+    public static Color darken(Color src, float amount, Color dst) {
+        if (amount <= 0f) return dst.set(src);
+        if (amount >= 1f) return dst.setLinear(0f, 0f, 0f, src.a);
+        Vector4f lab = src.oklab();
+        dst.oklab.set(lab);
+        dst.oklab.x = Math.max(0.0f, dst.oklab.x - amount);
+        return oklabToLinear(dst.oklab, dst);
+    }
+
+    // public static Color brighten(Color src, float amount, Color dst) {
+    //     if (amount <= 0) return dst.set(src);
+    //     if (amount >= 1) return dst.setLinear(1,1,1,src.a);
+    //     float r = src.r + (1.0f - src.r) * amount;
+    //     float g = src.g + (1.0f - src.g) * amount;
+    //     float b = src.b + (1.0f - src.b) * amount;
+    //     return dst.setLinear(r,g,b,src.a);
+    // }
+    // public static Color darken(Color src, float amount, Color dst) {
+    //     if (amount <= 0) return dst.set(src);
+    //     if (amount >= 1) return dst.setLinear(0,0,0,src.a);
+    //     float r = src.r * (1.0f - amount);
+    //     float g = src.g * (1.0f - amount);
+    //     float b = src.b * (1.0f - amount);
+    //     return dst.setLinear(r,g,b,src.a);
+    // }
 
     public static Color lerpLinear(Color start, Color target, float t, Color dst) {
         if (t <= 0) return dst.set(start);
@@ -355,8 +344,39 @@ public class Color {
         float g = start.g + (target.g - start.g) * t;
         float b = start.b + (target.b - start.b) * t;
         float a = start.a + (target.a - start.a) * t;
-        return dst.set(r, g, b, a);
+        return dst.setLinear(r, g, b, a);
     }
+
+    public static Vector4f linearToOklab(Color src, Vector4f dst) {
+        // Linear RGB to LMS
+        float l1 = 0.4122214708f * src.r + 0.5363325363f * src.g + 0.0514459929f * src.b;
+        float m1 = 0.2119034982f * src.r + 0.6806995451f * src.g + 0.1073969566f * src.b;
+        float s1 = 0.0883024619f * src.r + 0.2817188376f * src.g + 0.6299787005f * src.b;
+        l1 = (float) Math.cbrt(l1);
+        m1 = (float) Math.cbrt(m1);
+        s1 = (float) Math.cbrt(s1);
+        // LMS to Oklab
+        float l = 0.2104542553f * l1 + 0.7936177850f * m1 - 0.0040720468f * s1;
+        float a = 1.9779984951f * l1 - 2.4285922050f * m1 + 0.4505937099f * s1;
+        float b = 0.0259040371f * l1 + 0.7827717662f * m1 - 0.8086757660f * s1;
+        return dst.set(l, a, b, src.a);
+    }
+
+    public static Color oklabToLinear(Vector4f src, Color dst) {
+        // Oklab to LMS
+        float l = src.x + 0.3963377774f * src.y + 0.2158037573f * src.z;
+        float m = src.x - 0.1055613458f * src.y - 0.0638541728f * src.z;
+        float s = src.x - 0.0894841775f * src.y - 1.2914855480f * src.z;
+        l = l * l * l;
+        m = m * m * m;
+        s = s * s * s;
+        // LMS to Linear RGB
+        float r = +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
+        float g = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
+        float b = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
+        return dst.setLinear(r, g, b, src.w);
+    }
+
 
     /**
      * Interpolates between two colors inside the perceptually uniform Oklab space.
@@ -365,54 +385,16 @@ public class Color {
     public static Color lerpOklab(Color start, Color target, float t, Color dst) {
         if (t <= 0f) return dst.set(start);
         if (t >= 1f) return dst.set(target);
-
-        // 1. Convert Start Color from Linear RGB to Oklab
-        float l1 = 0.4122214708f * start.r + 0.5363325363f * start.g + 0.0514459929f * start.b;
-        float m1 = 0.2119034982f * start.r + 0.6806995451f * start.g + 0.1073969566f * start.b;
-        float s1 = 0.0883024619f * start.r + 0.2817188376f * start.g + 0.6299787005f * start.b;
-
-        l1 = (float) Math.cbrt(l1);
-        m1 = (float) Math.cbrt(m1);
-        s1 = (float) Math.cbrt(s1);
-
-        float L1 = 0.2104542553f * l1 + 0.7936177850f * m1 - 0.0040720468f * s1;
-        float A1 = 1.9779984951f * l1 - 2.4285922050f * m1 + 0.4505937099f * s1;
-        float B1 = 0.0259040371f * l1 + 0.7827717662f * m1 - 0.8086757660f * s1;
-
-        // 2. Convert Target Color from Linear RGB to Oklab
-        float l2 = 0.4122214708f * target.r + 0.5363325363f * target.g + 0.0514459929f * target.b;
-        float m2 = 0.2119034982f * target.r + 0.6806995451f * target.g + 0.1073969566f * target.b;
-        float s2 = 0.0883024619f * target.r + 0.2817188376f * target.g + 0.6299787005f * target.b;
-
-        l2 = (float) Math.cbrt(l2);
-        m2 = (float) Math.cbrt(m2);
-        s2 = (float) Math.cbrt(s2);
-
-        float L2 = 0.2104542553f * l2 + 0.7936177850f * m2 - 0.0040720468f * s2;
-        float A2 = 1.9779984951f * l2 - 2.4285922050f * m2 + 0.4505937099f * s2;
-        float B2 = 0.0259040371f * l2 + 0.7827717662f * m2 - 0.8086757660f * s2;
-
-        // 3. Linearly Interpolate the components within Oklab Space
-        float L = L1 + (L2 - L1) * t;
-        float A = A1 + (A2 - A1) * t;
-        float B = B1 + (B2 - B1) * t;
-        float alpha = start.a + (target.a - start.a) * t;
-
-        // 4. Invert Oklab back to Linear LMS Space
-        float l = L + 0.3963377774f * A + 0.2158037573f * B;
-        float m = L - 0.1055613458f * A - 0.0638541728f * B;
-        float s = L - 0.0894841775f * A - 1.2914855480f * B;
-
-        l = l * l * l;
-        m = m * m * m;
-        s = s * s * s;
-
-        // 5. Invert LMS back to Linear RGB Workspace
-        float r = +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
-        float g = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
-        float b = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
-
-        return dst.set(r, g, b, alpha);
+        // Grab cached or freshly computed Oklab representations (x=L, y=A, z=B, w=alpha)
+        Vector4f oklabStart = start.oklab();
+        Vector4f oklabTarget = target.oklab();
+        // Linearly interpolate the components within Oklab Space
+        dst.oklab.x = oklabStart.x + (oklabTarget.x - oklabStart.x) * t;
+        dst.oklab.y = oklabStart.y + (oklabTarget.y - oklabStart.y) * t;
+        dst.oklab.z = oklabStart.z + (oklabTarget.z - oklabStart.z) * t;
+        dst.oklab.w = oklabStart.w + (oklabTarget.w - oklabStart.w) * t;
+        oklabToLinear(dst.oklab,dst);
+        return dst;
     }
 
     /**
@@ -420,44 +402,25 @@ public class Color {
      * Safely catches format errors and falls back to White if the string is corrupted.
      */
     public static Color fromHex(String hex, Color dst) {
-        if (hex == null || hex.isEmpty()) return dst.set(1f, 1f, 1f, 1f);
+        if (hex == null || hex.isEmpty()) return dst.setLinear(1f, 1f, 1f, 1f);
         int start = hex.charAt(0) == '#' ? 1 : 0;
         int length = hex.length() - start;
-        if (length != 6 && length != 8) return dst.set(1f, 1f, 1f, 1f);
+        if (length != 6 && length != 8) return dst.setLinear(1f, 1f, 1f, 1f);
         try {
             int rBits = Integer.parseInt(hex.substring(start, start + 2), 16);
             int gBits = Integer.parseInt(hex.substring(start + 2, start + 4), 16);
             int bBits = Integer.parseInt(hex.substring(start + 4, start + 6), 16);
             int aBits = (length == 8) ? Integer.parseInt(hex.substring(start + 6, start + 8), 16) : 255;
-            return dst.set(
+            return dst.setLinear(
                     srgbToLinear(rBits / 255f),
                     srgbToLinear(gBits / 255f),
                     srgbToLinear(bBits / 255f),
                     aBits / 255f);
         } catch (NumberFormatException e) {
-            return dst.set(1f, 1f, 1f, 1f);
+            return dst.setLinear(1f, 1f, 1f, 1f);
         }
     }
 
-    /**
-     * Parses a raw Linear Hex code string directly into a Color object without gamma alteration.
-     * Safely catches format errors and falls back to White if the string is corrupted.
-     */
-    public static Color fromHexLinear(String hex, Color dst) {
-        if (hex == null || hex.isEmpty()) return dst.set(1f, 1f, 1f, 1f);
-        int start = hex.charAt(0) == '#' ? 1 : 0;
-        int length = hex.length() - start;
-        if (length != 6 && length != 8) return dst.set(1f, 1f, 1f, 1f);
-        try {
-            int rBits = Integer.parseInt(hex.substring(start, start + 2), 16);
-            int gBits = Integer.parseInt(hex.substring(start + 2, start + 4), 16);
-            int bBits = Integer.parseInt(hex.substring(start + 4, start + 6), 16);
-            int aBits = (length == 8) ? Integer.parseInt(hex.substring(start + 6, start + 8), 16) : 255;
-            return dst.set(rBits / 255f, gBits / 255f, bBits / 255f, aBits / 255f);
-        } catch (NumberFormatException e) {
-            return dst.set(1f, 1f, 1f, 1f);
-        }
-    }
 
     // =============================================================================
     // Serialization Adapter
@@ -505,7 +468,7 @@ public class Color {
             float b = srgbToLinear((float) in.nextDouble());
             float a = (float) in.nextDouble();
             in.endArray();
-            return new Color(r, g, b, a);
+            return new Color().setLinear(r,g,b,a);
             //if (in.peek() == JsonToken.NULL) {
             //    in.nextNull();
             //    return null;
@@ -553,13 +516,13 @@ public class Color {
         // 1. Calculate the mathematically correct final alpha channel first
         float outA = src.a() + dst.a() * (1f - src.a());
         // Edge case: If both colors are completely invisible, return a clear color to avoid divide-by-zero
-        if (outA <= 0f) return out.set(0f, 0f, 0f, 0f);
+        if (outA <= 0f) return out.setLinear(0f, 0f, 0f, 0f);
         // 2. Mix the color channels accounting for the destination's alpha weight,
         // and divide by the final alpha to bring the result back into Straight Space.
         float r = (src.r() * src.a() + dst.r() * dst.a() * (1f - src.a())) / outA;
         float g = (src.g() * src.a() + dst.g() * dst.a() * (1f - src.a())) / outA;
         float b = (src.b() * src.a() + dst.b() * dst.a() * (1f - src.a())) / outA;
-        return out.set(r, g, b, outA);
+        return out.setLinear(r, g, b, outA);
     }
 
     /**
@@ -587,7 +550,7 @@ public class Color {
         // 2. Calculate the alpha track via the separate primitive method
         float a = blendAlpha(src.a(), srcAlphaFactor, dst.a(), dstAlphaFactor, alphaEquation);
         // 3. Delegate to your container (which manages its own bounds clamping)
-        return out.set(r, g, b, a);
+        return out.setLinear(r, g, b, a);
     }
 
     /**

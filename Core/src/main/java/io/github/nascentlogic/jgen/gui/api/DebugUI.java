@@ -16,12 +16,11 @@ public interface DebugUI {
 
     void beginButtons(String name); // buttons grop together horizontally if there's room. Then continue by row
     void endButtons();
-    boolean button(String label);
+    boolean button(String label,boolean selected);
 
-
-    boolean beginMenu(String name, int heightItems);
-    boolean menuItem(String label, boolean selected);
-    void endMenu();
+    boolean beginListMenu(String name, int heightItems);
+    boolean listMenuItem(String label, boolean selected);
+    void endListMenu();
 
     void label(String label);
     void labelValue(String label, String value);

@@ -16,20 +16,23 @@ public class TestGame implements Game {
         Jgen.get().launch(new TestGame(),args);
     }
 
-    GuiWindowTest windowTest = new GuiWindowTest();
     JuiCore jui;
 
     public void configure(LaunchConfig config, String[] args) {
         for (String s : args) System.out.println(s);
-        config.gameResolution.set(1280,720);config.gameResolution.set(1920,1080);
+        config.gameResolution.set(1280,720);
+        config.gameResolution.set(1920,1080);
         config.windowedMode = true;
         config.resizableWindow = true;
         config.vsyncEnabled = true;
     }
 
     public void start() throws Exception {
+
         jui = new JuiCore();
-        jui.windowRegister(windowTest,1);
+        WindowTest test1 = new WindowTest(440,440,"Project");
+        jui.windowRegister(test1,1);
+        test1.open();
     }
 
     public void update(double dt) {

@@ -7,12 +7,12 @@ import io.github.nascentlogic.jgen.gui.JuiCore;
  */
 public interface JuiWindow {
 
-
-    void process(JuiCore jui, float dt);
+    default void onRegister(JuiCore jui) { /* */ }
+    void process(JuiCore jui, float dt); //                               layer
     String name();
     void open();
     void close();
     boolean isOpen();
-    default void onExit() { /* */ }
+    default void onExit(JuiCore jui) { /* */ }
 
 }
